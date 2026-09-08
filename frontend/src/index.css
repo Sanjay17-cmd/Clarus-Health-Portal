@@ -1,0 +1,213 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Clarus Health Portal — Global Styles ── */
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: #F4F7FA;
+    color: #0A2540;
+    min-height: 100vh;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(10, 37, 64, 0.15);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(10, 37, 64, 0.25);
+  }
+}
+
+@layer components {
+  /* ── Glass Card ── */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    box-shadow:
+      0 10px 30px -5px rgba(10, 37, 64, 0.08),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.5);
+    border-radius: 16px;
+  }
+
+  .glass-card-sm {
+    background: rgba(255, 255, 255, 0.80);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(226, 232, 240, 0.6);
+    box-shadow: 0 4px 15px -2px rgba(10, 37, 64, 0.06);
+    border-radius: 12px;
+  }
+
+  .glass-card-elevated {
+    background: rgba(255, 255, 255, 0.90);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    box-shadow:
+      0 20px 50px -10px rgba(10, 37, 64, 0.12),
+      0 10px 30px -5px rgba(10, 37, 64, 0.08),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.6);
+    border-radius: 20px;
+  }
+
+  /* ── Navy Gradient Surface ── */
+  .navy-gradient {
+    background: linear-gradient(180deg, #0A2540 0%, #0D2D4A 50%, #0F3555 100%);
+  }
+
+  .navy-gradient-horizontal {
+    background: linear-gradient(90deg, #0A2540 0%, #0D2D4A 100%);
+  }
+
+  /* ── Azure Accent Gradient ── */
+  .azure-gradient {
+    background: linear-gradient(135deg, #0066CC 0%, #0088EE 50%, #10B981 100%);
+  }
+
+  .azure-gradient-soft {
+    background: linear-gradient(135deg, #0066CC 0%, #338FDE 100%);
+  }
+
+  /* ── Interactive Elements ── */
+  .btn-primary {
+    @apply px-5 py-2.5 rounded-xl font-semibold text-white text-sm transition-all duration-200;
+    background: linear-gradient(135deg, #0066CC 0%, #0077DD 100%);
+    box-shadow: 0 4px 15px -2px rgba(0, 102, 204, 0.35);
+  }
+  .btn-primary:hover {
+    box-shadow: 0 8px 25px -3px rgba(0, 102, 204, 0.45);
+    transform: translateY(-1px);
+  }
+  .btn-primary:active {
+    transform: translateY(0);
+  }
+
+  .btn-secondary {
+    @apply px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-200;
+    @apply border border-slate-200 text-navy-500 bg-white/80;
+  }
+  .btn-secondary:hover {
+    @apply border-azure-300 text-azure-600 bg-azure-50/50;
+  }
+
+  .btn-ghost {
+    @apply px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200;
+    @apply text-slate-500 hover:text-navy-500 hover:bg-slate-100/60;
+  }
+
+  /* ── Input Fields ── */
+  .input-glass {
+    @apply w-full px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200;
+    @apply bg-white/60 border border-slate-200/80 text-navy-500 placeholder-slate-400;
+    @apply focus:outline-none focus:ring-2 focus:ring-azure-500/20 focus:border-azure-400 focus:bg-white/80;
+    backdrop-filter: blur(4px);
+  }
+
+  /* ── Sidebar Active Link ── */
+  .sidebar-link {
+    @apply flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200;
+    @apply text-slate-300 hover:text-white hover:bg-white/10;
+  }
+  .sidebar-link-active {
+    @apply flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium;
+    @apply text-white bg-white/15;
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+  }
+
+  /* ── Status Badges ── */
+  .badge-verified {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold;
+    @apply bg-teal-50 text-teal-700 border border-teal-200/60;
+  }
+  .badge-pending {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold;
+    @apply bg-amber-50 text-amber-700 border border-amber-200/60;
+  }
+  .badge-flagged {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold;
+    @apply bg-red-50 text-red-700 border border-red-200/60;
+  }
+
+  /* ── Table Styles ── */
+  .data-table {
+    @apply w-full text-sm;
+  }
+  .data-table thead th {
+    @apply px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider;
+    @apply border-b border-slate-100;
+  }
+  .data-table tbody td {
+    @apply px-4 py-3.5 text-slate-700;
+    @apply border-b border-slate-50;
+  }
+  .data-table tbody tr {
+    @apply transition-colors duration-150;
+  }
+  .data-table tbody tr:hover {
+    @apply bg-azure-50/30;
+  }
+
+  /* ── Canvas Background Pattern ── */
+  .canvas-bg {
+    background-color: #F4F7FA;
+    background-image:
+      radial-gradient(at 20% 20%, rgba(0, 102, 204, 0.03) 0%, transparent 50%),
+      radial-gradient(at 80% 80%, rgba(16, 185, 129, 0.03) 0%, transparent 50%),
+      radial-gradient(at 50% 0%, rgba(10, 37, 64, 0.02) 0%, transparent 60%);
+  }
+
+  /* ── Login Background ── */
+  .login-bg {
+    background: linear-gradient(135deg, #0A2540 0%, #0D2D4A 30%, #0F3555 60%, #0A2540 100%);
+    position: relative;
+    overflow: hidden;
+  }
+  .login-bg::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(0, 102, 204, 0.15) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 80%, rgba(16, 185, 129, 0.10) 0%, transparent 50%);
+    animation: rotateBg 30s linear infinite;
+  }
+
+  @keyframes rotateBg {
+    0%   { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

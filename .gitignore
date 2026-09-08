@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment variables
+.env
+backend/.env
+!.env.example
+!backend/.env.example
+
+# Build outputs
+dist/
+**/dist/
+*.tsbuildinfo
+
+# Uploads / Storage
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
