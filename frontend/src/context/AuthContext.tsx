@@ -17,6 +17,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  register: (data: { email: string; password: string; full_name: string; role: string; department?: string; phone?: string }) => Promise<void>;
   logout: () => void;
 }
 
@@ -49,6 +50,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('clarus_user', JSON.stringify(newUser));
   }, []);
 
+  const register = useCallback(async (data: { email: string; password: string; full_name: string; role: string; department?: string; phone?: string }) => {
+    await api.post('/auth/register', data);
+    // Automatically log in after registration
+    const res = await api.post('/auth/login', { email: data.email, password: data.password });
+    const { token: newToken, user: newUser } = res.data;
+
+    setToken(newToken);
+    setUser(newUser);
+    localStorage.setItem('clarus_token', newToken);
+    localStorage.setItem('clarus_user', JSON.stringify(newUser));
+  }, []);
+
   const logout = useCallback(() => {
     setToken(null);
     setUser(null);
@@ -64,6 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated: !!token && !!user,
         isLoading,
         login,
+        register,
         logout,
       }}
     >

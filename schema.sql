@@ -118,43 +118,8 @@ CREATE TABLE IF NOT EXISTS AuditLogs (
 ) ENGINE=InnoDB;
 
 -- ============================================================
--- 5. SEED DATA
+-- 5. CLEAN INITIALIZATION (NO SEED DATA)
 -- ============================================================
+-- Database initialized clean with no pre-existing users or reports.
+-- Use the Register form on the frontend login page to create accounts.
 
--- Passwords (plaintext → bcrypt):
---   admin@clarus.health        → admin123
---   dr.chen@clarus.health      → doctor123
---   lab.martinez@clarus.health → lab123
---   emily.wilson@email.com     → patient123
---   robert.taylor@email.com   → patient123
-
-INSERT INTO Users (email, password_hash, full_name, role, department, phone) VALUES
-('admin@clarus.health', '$2a$10$V1a.qrgvvzUCLGfX6dA/DuMQcaIs23Rk77rnmK4BqilNwP6CEnBXa', 'Dr. Sarah Mitchell', 'Admin', 'Administration', '+1-555-0100');
-
-INSERT INTO Users (email, password_hash, full_name, role, department, phone) VALUES
-('dr.chen@clarus.health', '$2a$10$n8R9HHhW6Fnwn4xxRwEqtOOGZiEqjfuOcxeUHeszJ9I4z00OruPvG', 'Dr. James Chen', 'Doctor', 'Cardiology', '+1-555-0201');
-
-INSERT INTO Users (email, password_hash, full_name, role, department, phone) VALUES
-('lab.martinez@clarus.health', '$2a$10$S1NFFD1UUMq6y/A5SWGGvuaqMgz2Pdj/fiPqOEcJANiPdo4tCDHMy', 'Maria Martinez', 'LabTechnician', 'Pathology', '+1-555-0301');
-
-INSERT INTO Users (email, password_hash, full_name, role, department, phone) VALUES
-('emily.wilson@email.com', '$2a$10$WNKzjKzygA3gYmgDoNB9sulirdEvpaal9pvBIxhT.EflNqioEeqlC', 'Emily Wilson', 'Patient', NULL, '+1-555-0401');
-
-INSERT INTO Users (email, password_hash, full_name, role, department, phone) VALUES
-('robert.taylor@email.com', '$2a$10$rOMNZ38g/iT6iLOuSWD0t.NKgIXWNbHyEFN2nwvP88EdQHPLyAx86', 'Robert Taylor', 'Patient', NULL, '+1-555-0402');
-
--- Sample Medical Reports
-INSERT INTO MedicalReports (patient_id, uploaded_by, title, department, file_path, file_type, file_size, notes, status) VALUES
-(4, 3, 'Complete Blood Count — September 2026',  'Pathology',   'uploads/sample_cbc_report.pdf',  'application/pdf', 245000,  'Routine CBC panel. All markers within normal range.', 'Verified'),
-(4, 3, 'Chest X-Ray — Anterior-Posterior View',   'Radiology',   'uploads/sample_xray.pdf',        'application/pdf', 1200000, 'No abnormalities detected. Clear lung fields.',       'Verified'),
-(5, 3, 'Lipid Panel — Fasting',                   'Pathology',   'uploads/sample_lipid.pdf',       'application/pdf', 198000,  'LDL slightly elevated. Recommend dietary changes.',   'Pending'),
-(4, 3, 'Thyroid Function Panel (TSH, T3, T4)',     'Endocrinology','uploads/sample_thyroid.pdf',     'application/pdf', 210000,  'TSH within normal limits. T4 borderline low.',        'Verified'),
-(5, 3, 'Urinalysis — Routine',                    'Pathology',   'uploads/sample_urinalysis.pdf',  'application/pdf', 175000,  'Normal findings. No proteinuria.',                    'Verified');
-
--- Sample Audit Logs
-INSERT INTO AuditLogs (user_id, action, entity_type, entity_id, ip_address, metadata) VALUES
-(3, 'REPORT_UPLOAD',  'MedicalReports', 1, '192.168.1.10', '{"file_type":"application/pdf","department":"Pathology"}'),
-(3, 'REPORT_UPLOAD',  'MedicalReports', 2, '192.168.1.10', '{"file_type":"application/pdf","department":"Radiology"}'),
-(1, 'REPORT_VERIFY',  'MedicalReports', 1, '192.168.1.5',  '{"previous_status":"Pending","new_status":"Verified"}'),
-(1, 'USER_LOGIN',     NULL,             NULL, '192.168.1.5',  '{"method":"credentials"}'),
-(2, 'REPORT_VIEW',    'MedicalReports', 1, '192.168.1.20', '{"patient_id":4}');
