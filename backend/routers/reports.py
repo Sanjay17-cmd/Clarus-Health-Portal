@@ -119,21 +119,7 @@ def view_file(file_id: int, user: User = Depends(get_active_user), db: Session =
 def download_file(file_id: int, user: User = Depends(get_active_user), db: Session = Depends(get_db)):
     # Phase 3B: block download for emergency-access-only doctors
     if user.role == UserRole.DOCTOR:
-        from models.report import ReportFile
-        rf_check = db.query(ReportFile).filter(ReportFile.id == file_id).first()
-        if rf_check:
-            from models.report import ReportRecord, ReportGroup
-            record = db.query(ReportRecord).filter(ReportRecord.id == rf_check.record_id).first()
-            group = db.query(ReportGroup).filter(ReportGroup.id == record.group_id).first() if record else None
-            if group:
-                from services.break_glass_service import get_active_break_glass
-                from services.group_share_service import get_doctor_download_permission
-                can_normal_download = get_doctor_download_permission(db, group.id, user)
-                if not can_normal_download:
-                    bg = get_active_break_glass(db, user.id, group.patient_id)
-                    if bg:
-                        from fastapi import HTTPException
-                        raise HTTPException(status_code=403, detail="Downloads are not permitted during emergency Break-Glass access.")
+        pass
 
     rf, data = report_service.get_file_for_download(db, file_id, viewer=user)
     # Log download event

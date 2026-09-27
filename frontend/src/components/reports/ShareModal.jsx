@@ -10,8 +10,8 @@
  */
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { sharesApi } from '../../api/shares'
-import { reportsApi } from '../../api/reports'
+import { sharesApi } from '../../api'
+import { reportsApi } from '../../api'
 import { useToast } from '../ui/Toast'
 import client from '../../api/client'
 

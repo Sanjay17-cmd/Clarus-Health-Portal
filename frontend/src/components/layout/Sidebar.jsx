@@ -10,7 +10,6 @@ const NAV = {
     { label: 'Corrections',         icon: '✏️',  to: '/admin/corrections' },
     { label: 'Suspended Records',   icon: '🔒', to: '/admin/suspended' },
     { label: 'Archive Provenance',  icon: '🗃️', to: '/admin/archive' },
-    { label: 'Emergency Security',  icon: '🚨', to: '/admin/emergency' },
     { label: 'Document Disputes',   icon: '📂', to: '/admin/disputes' },
   ],
   DOCTOR: [

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import Layout from '../../components/layout/Layout'
-import { getCorrections } from '../../api/admin_reports'
+import { getCorrections } from '../../api'
 
 const fmt = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
 

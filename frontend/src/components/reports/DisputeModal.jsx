@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { createDispute } from '../../api/disputes'
+import { createDispute } from '../../api'
 import { useToast } from '../ui/Toast'
 
 const REASONS = [

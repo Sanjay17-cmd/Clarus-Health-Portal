@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import Layout from '../../components/layout/Layout'
-import { getDeletionRequests, restoreRecord, permanentlyDeleteRecord } from '../../api/admin_reports'
+import { getDeletionRequests, restoreRecord, permanentlyDeleteRecord } from '../../api'
 import { useToast } from '../../components/ui/Toast'
 
 const fmt = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'

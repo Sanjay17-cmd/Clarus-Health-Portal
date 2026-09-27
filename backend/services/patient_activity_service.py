@@ -9,7 +9,7 @@ from models.report import ReportGroup
 def log_access_event(db: Session, record_id: int, patient_id: int, event_type: str,
                      actor_id: int | None = None, actor_role: str | None = None,
                      group_id: int | None = None, details: dict | None = None,
-                     break_glass_request_id: int | None = None, commit: bool = True) -> None:
+                     commit: bool = True) -> None:
     """Append-only: log an observable access event for the patient timeline."""
     ev = RecordAccessEvent(
         record_id=record_id,
@@ -19,7 +19,6 @@ def log_access_event(db: Session, record_id: int, patient_id: int, event_type: s
         actor_role=actor_role,
         event_type=event_type,
         details=details,
-        break_glass_request_id=break_glass_request_id,
     )
     db.add(ev)
     if commit:
@@ -66,7 +65,6 @@ def get_patient_activity(db: Session, patient_id: int, limit: int = 100) -> list
             "actor_role": ev.actor_role,
             "event_type": ev.event_type,
             "details": ev.details,
-            "break_glass_request_id": ev.break_glass_request_id,
             "created_at": ev.created_at,
         }
         for ev in events

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import Layout from '../../components/layout/Layout'
-import { getMyActivity } from '../../api/patient_activity'
+import { getMyActivity } from '../../api'
 
 const EVENT_ICONS = {
   VIEWED: '👁',
@@ -33,7 +33,7 @@ const EVENT_COLORS = {
 function EventItem({ ev }) {
   const icon = EVENT_ICONS[ev.event_type] || EVENT_ICONS.DEFAULT
   const color = EVENT_COLORS[ev.event_type] || 'var(--text-primary)'
-  const isEmergency = ev.event_type === 'BREAK_GLASS' || ev.break_glass_request_id
+  const isEmergency = ev.event_type === 'BREAK_GLASS'
 
   const describe = () => {
     const actor = ev.actor_name ? (ev.actor_role === 'DOCTOR' ? `Dr. ${ev.actor_name}` : ev.actor_name) : 'Someone'
@@ -67,9 +67,7 @@ function EventItem({ ev }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ color, fontWeight: isEmergency ? 700 : 500, fontSize: 14 }}>{describe()}</div>
         {ev.details?.notes && <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 2, fontStyle: 'italic' }}>{ev.details.notes}</div>}
-        {isEmergency && ev.break_glass_request_id && (
-          <div style={{ fontSize: 11, color: '#f87171', marginTop: 2 }}>Emergency Request #{ev.break_glass_request_id}</div>
-        )}
+
       </div>
       <div style={{ color: 'var(--text-muted)', fontSize: 12, whiteSpace: 'nowrap', flexShrink: 0 }}>
         {new Date(ev.created_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}

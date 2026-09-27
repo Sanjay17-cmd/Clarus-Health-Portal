@@ -9,7 +9,6 @@ from routers.reports import router as reports_router
 from routers.shares import router as shares_router, public_router
 from routers.admin_reports import router as admin_reports_router
 from routers.archive import router as archive_router
-from routers.break_glass import router as break_glass_router
 from routers.disputes import router as disputes_router
 from routers.patient_activity import router as patient_activity_router
 
@@ -35,7 +34,6 @@ app.include_router(public_router)
 app.include_router(admin_reports_router)
 app.include_router(archive_router)
 # Phase 3B
-app.include_router(break_glass_router)
 app.include_router(disputes_router)
 app.include_router(patient_activity_router)
 

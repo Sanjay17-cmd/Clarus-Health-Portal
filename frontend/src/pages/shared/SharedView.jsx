@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import SecureViewer from '../../components/reports/SecureViewer'
 import RecordTypeTag from '../../components/reports/RecordTypeTag'
-import { sharesApi } from '../../api/shares'
+import { sharesApi } from '../../api'
 
 const GLASS = {
   background: 'rgba(255,255,255,0.07)',

@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { reportsApi } from '../../api/reports'
+import { reportsApi } from '../../api'
 import { useToast } from '../ui/Toast'
 import Button from '../ui/Button'
 

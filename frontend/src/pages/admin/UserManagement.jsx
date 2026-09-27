@@ -8,7 +8,7 @@ import Input from '../../components/ui/Input'
 import Select from '../../components/ui/Select'
 import { StatusBadge, RoleBadge } from '../../components/ui/Badge'
 import EmptyState from '../../components/ui/EmptyState'
-import { adminApi } from '../../api/admin'
+import { adminApi } from '../../api'
 import { useToast } from '../../components/ui/Toast'
 
 const ROLES = ['', 'PATIENT', 'DOCTOR', 'LAB_TECHNICIAN', 'ADMIN']

@@ -37,7 +37,6 @@ import AdminSuspended from './pages/admin/AdminSuspended'
 import AdminArchive from './pages/admin/AdminArchive'
 
 // Phase 3B
-import AdminEmergency from './pages/admin/AdminEmergency'
 import AdminDisputes from './pages/admin/AdminDisputes'
 import PatientActivity from './pages/patient/PatientActivity'
 
@@ -93,9 +92,6 @@ export default function App() {
               } />
               <Route path="/admin/archive" element={
                 <ProtectedRoute><RoleRoute role="ADMIN"><AdminArchive /></RoleRoute></ProtectedRoute>
-              } />
-              <Route path="/admin/emergency" element={
-                <ProtectedRoute><RoleRoute role="ADMIN"><AdminEmergency /></RoleRoute></ProtectedRoute>
               } />
               <Route path="/admin/disputes" element={
                 <ProtectedRoute><RoleRoute role="ADMIN"><AdminDisputes /></RoleRoute></ProtectedRoute>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import Layout from '../../components/layout/Layout'
-import { adminListDisputes, adminActOnDispute, adminDisputeAudit } from '../../api/disputes'
+import { adminListDisputes, adminActOnDispute, adminDisputeAudit } from '../../api'
 import { useToast } from '../../components/ui/Toast'
 
 const fmt = (d) => d ? new Date(d).toLocaleDateString('en-GB') : '—'

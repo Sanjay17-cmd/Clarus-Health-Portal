@@ -1,79 +1,152 @@
 -- ============================================================================
--- Clarus Health Portal — Phase 4 FINAL FIX SQL
--- Run this ONCE. Exactly what is still missing as of 2026-09-27.
---
--- Already done (DO NOT re-run):
---   group_shares columns: status, parent_share_id, can_delegate,
---                         accepted_at, revoked_at, revoked_by
---   notifications.type enum already updated
---   granular_shares / granular_share_records / granular_share_files /
---   doctor_share_inbox / share_delegations already exist
---
--- Still needed (what this file does):
---   1. Fix parent_share_id column type (INT → INT UNSIGNED to match id)
---   2. Add FK fk_group_shares_parent (self-ref)
---   3. Add FK fk_group_shares_revoked_by (→ users)
---   4. Add indexes on status, parent_share_id
---   5. CREATE group_share_records
---   6. CREATE group_share_files
---   7. CREATE share_exports
---   8. CREATE share_imports
+-- Clarus Health Portal — Phase 4 Schema (SAFE / IDEMPOTENT VERSION)
+-- Uses stored procedures to check INFORMATION_SCHEMA before adding columns.
+-- Run each CALL statement one at a time if you prefer, or run all at once.
 -- ============================================================================
-
 USE clarus_health;
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- ============================================================================
--- 1. Fix parent_share_id type: INT → INT UNSIGNED (must match group_shares.id)
+-- HELPER: drop and recreate a procedure that safely adds a column only if
+-- it doesn't already exist (works on MySQL 5.7+)
 -- ============================================================================
-ALTER TABLE `group_shares`
-    MODIFY COLUMN `parent_share_id` INT UNSIGNED NULL DEFAULT NULL
-    COMMENT 'Set if this is a delegated child share';
 
-ALTER TABLE `group_shares`
-    MODIFY COLUMN `revoked_by` INT UNSIGNED NULL DEFAULT NULL;
+DROP PROCEDURE IF EXISTS clarus_add_column;
 
--- ============================================================================
--- 2. Foreign key: parent_share_id → group_shares.id (self-ref)
--- ============================================================================
-ALTER TABLE `group_shares`
-    ADD CONSTRAINT `fk_group_shares_parent`
-        FOREIGN KEY (`parent_share_id`)
-        REFERENCES `group_shares` (`id`)
-        ON DELETE SET NULL ON UPDATE CASCADE;
-
--- ============================================================================
--- 3. Foreign key: revoked_by → users.id
--- ============================================================================
-ALTER TABLE `group_shares`
-    ADD CONSTRAINT `fk_group_shares_revoked_by`
-        FOREIGN KEY (`revoked_by`)
-        REFERENCES `users` (`id`)
-        ON DELETE SET NULL ON UPDATE CASCADE;
-
--- ============================================================================
--- 4. Indexes (skip if you got duplicate key errors before on these)
--- ============================================================================
-ALTER TABLE `group_shares`
-    ADD INDEX `idx_group_shares_status` (`status`);
-
-ALTER TABLE `group_shares`
-    ADD INDEX `idx_group_shares_parent` (`parent_share_id`);
-
-ALTER TABLE `group_shares`
-    ADD INDEX `idx_group_shares_grantee_user_status` (`grantee_user_id`, `status`);
+DELIMITER $$
+CREATE PROCEDURE clarus_add_column(
+    IN p_table   VARCHAR(64),
+    IN p_column  VARCHAR(64),
+    IN p_ddl     TEXT
+)
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = p_table
+          AND COLUMN_NAME  = p_column
+    ) THEN
+        SET @sql = CONCAT('ALTER TABLE `', p_table, '` ADD COLUMN ', p_ddl);
+        PREPARE stmt FROM @sql;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
+END$$
+DELIMITER ;
 
 -- ============================================================================
--- 5. group_share_records — explicit version/record scope per share
+-- HELPER: safely add an index only if it doesn't exist
 -- ============================================================================
+
+DROP PROCEDURE IF EXISTS clarus_add_index;
+
+DELIMITER $$
+CREATE PROCEDURE clarus_add_index(
+    IN p_table  VARCHAR(64),
+    IN p_index  VARCHAR(64),
+    IN p_ddl    TEXT
+)
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = p_table
+          AND INDEX_NAME   = p_index
+    ) THEN
+        SET @sql = CONCAT('ALTER TABLE `', p_table, '` ADD INDEX `', p_index, '` ', p_ddl);
+        PREPARE stmt FROM @sql;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
+END$$
+DELIMITER ;
+
+-- ============================================================================
+-- HELPER: safely add a foreign key only if it doesn't exist
+-- ============================================================================
+
+DROP PROCEDURE IF EXISTS clarus_add_fk;
+
+DELIMITER $$
+CREATE PROCEDURE clarus_add_fk(
+    IN p_table       VARCHAR(64),
+    IN p_constraint  VARCHAR(64),
+    IN p_ddl         TEXT
+)
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+        WHERE TABLE_SCHEMA     = DATABASE()
+          AND TABLE_NAME       = p_table
+          AND CONSTRAINT_NAME  = p_constraint
+          AND CONSTRAINT_TYPE  = 'FOREIGN KEY'
+    ) THEN
+        SET @sql = CONCAT('ALTER TABLE `', p_table, '` ADD CONSTRAINT `', p_constraint, '` ', p_ddl);
+        PREPARE stmt FROM @sql;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
+END$$
+DELIMITER ;
+
+-- ============================================================================
+-- 1. ENHANCED GROUP SHARES — safely add each new column
+-- ============================================================================
+
+CALL clarus_add_column('group_shares', 'status',
+    "`status` ENUM('PENDING','ACCEPTED','REVOKED') NOT NULL DEFAULT 'PENDING'
+     COMMENT 'PENDING=not noticed, ACCEPTED=doctor ack, REVOKED=patient revoked'
+     AFTER `is_active`");
+
+CALL clarus_add_column('group_shares', 'parent_share_id',
+    '`parent_share_id` INT NULL DEFAULT NULL
+     COMMENT ''Set if this is a delegated child share''
+     AFTER `status`');
+
+CALL clarus_add_column('group_shares', 'can_delegate',
+    '`can_delegate` TINYINT(1) NOT NULL DEFAULT 0
+     COMMENT ''1=doctor may re-share within original scope''
+     AFTER `parent_share_id`');
+
+CALL clarus_add_column('group_shares', 'accepted_at',
+    '`accepted_at` DATETIME NULL DEFAULT NULL AFTER `can_delegate`');
+
+CALL clarus_add_column('group_shares', 'revoked_at',
+    '`revoked_at` DATETIME NULL DEFAULT NULL AFTER `accepted_at`');
+
+CALL clarus_add_column('group_shares', 'revoked_by',
+    '`revoked_by` INT NULL DEFAULT NULL AFTER `revoked_at`');
+
+-- Indexes
+CALL clarus_add_index('group_shares', 'idx_group_shares_status',
+    '(`status`)');
+
+CALL clarus_add_index('group_shares', 'idx_group_shares_parent',
+    '(`parent_share_id`)');
+
+CALL clarus_add_index('group_shares', 'idx_group_shares_grantee_user_status',
+    '(`grantee_user_id`, `status`)');
+
+-- Foreign keys
+CALL clarus_add_fk('group_shares', 'fk_group_shares_parent',
+    'FOREIGN KEY (`parent_share_id`) REFERENCES `group_shares`(`id`) ON DELETE SET NULL ON UPDATE CASCADE');
+
+CALL clarus_add_fk('group_shares', 'fk_group_shares_revoked_by',
+    'FOREIGN KEY (`revoked_by`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE');
+
+
+-- ============================================================================
+-- 2. VERSION-SCOPED SHARE RECORDS
+-- ============================================================================
+
 CREATE TABLE IF NOT EXISTS `group_share_records` (
-    `id`         INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `share_id`   INT UNSIGNED NOT NULL COMMENT 'FK group_shares.id',
-    `record_id`  INT UNSIGNED NOT NULL COMMENT 'FK report_records.id',
-    `created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `id`         INT      NOT NULL AUTO_INCREMENT,
+    `share_id`   INT      NOT NULL COMMENT 'FK group_shares.id',
+    `record_id`  INT      NOT NULL COMMENT 'FK report_records.id',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uq_gsr` (`share_id`, `record_id`),
+    UNIQUE KEY `uq_share_record` (`share_id`, `record_id`),
     KEY `idx_gsr_share`  (`share_id`),
     KEY `idx_gsr_record` (`record_id`),
     CONSTRAINT `fk_gsr_share`
@@ -83,17 +156,19 @@ CREATE TABLE IF NOT EXISTS `group_share_records` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='Restricts share to specific record IDs (overrides max_versions)';
 
+
 -- ============================================================================
--- 6. group_share_files — explicit file scope per (share, record)
+-- 3. FILE-SCOPED SHARE FILES
 -- ============================================================================
+
 CREATE TABLE IF NOT EXISTS `group_share_files` (
-    `id`         INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `share_id`   INT UNSIGNED NOT NULL COMMENT 'FK group_shares.id',
-    `record_id`  INT UNSIGNED NOT NULL COMMENT 'FK report_records.id',
-    `file_id`    INT UNSIGNED NOT NULL COMMENT 'FK report_files.id',
-    `created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `id`         INT      NOT NULL AUTO_INCREMENT,
+    `share_id`   INT      NOT NULL COMMENT 'FK group_shares.id',
+    `record_id`  INT      NOT NULL COMMENT 'FK report_records.id',
+    `file_id`    INT      NOT NULL COMMENT 'FK report_files.id',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uq_gsf` (`share_id`, `record_id`, `file_id`),
+    UNIQUE KEY `uq_share_file` (`share_id`, `record_id`, `file_id`),
     KEY `idx_gsf_share` (`share_id`),
     KEY `idx_gsf_file`  (`file_id`),
     CONSTRAINT `fk_gsf_share`
@@ -103,19 +178,21 @@ CREATE TABLE IF NOT EXISTS `group_share_files` (
     CONSTRAINT `fk_gsf_file`
         FOREIGN KEY (`file_id`)   REFERENCES `report_files`   (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  COMMENT='Restricts share to specific file IDs within each allowed record';
+  COMMENT='Restricts share to specific file IDs per record';
+
 
 -- ============================================================================
--- 7. share_exports — audit trail of every ZIP export from a group share
+-- 4. SHARE EXPORT LOG
 -- ============================================================================
+
 CREATE TABLE IF NOT EXISTS `share_exports` (
-    `id`           INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `share_id`     INT UNSIGNED NOT NULL COMMENT 'FK group_shares.id',
-    `exported_by`  INT UNSIGNED NOT NULL COMMENT 'FK users.id',
-    `export_token` VARCHAR(80)  NOT NULL COMMENT 'UUID for this export event',
-    `record_ids`   JSON         NULL     COMMENT 'Array of record IDs in this export',
-    `file_ids`     JSON         NULL     COMMENT 'Array of file IDs in this export',
-    `created_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `id`           INT         NOT NULL AUTO_INCREMENT,
+    `share_id`     INT         NOT NULL,
+    `exported_by`  INT         NOT NULL,
+    `export_token` VARCHAR(80) NOT NULL,
+    `record_ids`   JSON        NULL,
+    `file_ids`     JSON        NULL,
+    `created_at`   DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_se_token`  (`export_token`),
     KEY `idx_se_share`        (`share_id`),
@@ -125,21 +202,23 @@ CREATE TABLE IF NOT EXISTS `share_exports` (
     CONSTRAINT `fk_se_exporter`
         FOREIGN KEY (`exported_by`) REFERENCES `users`        (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  COMMENT='Every ZIP export event linked to its group share';
+  COMMENT='Audit trail of every ZIP export from a share';
+
 
 -- ============================================================================
--- 8. share_imports — provenance chain for every ZIP import
+-- 5. SHARE IMPORT LOG
 -- ============================================================================
+
 CREATE TABLE IF NOT EXISTS `share_imports` (
-    `id`              INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `export_id`       INT UNSIGNED NULL     COMMENT 'FK share_exports.id',
-    `share_id`        INT UNSIGNED NULL     COMMENT 'FK group_shares.id',
-    `imported_by`     INT UNSIGNED NOT NULL COMMENT 'FK users.id',
-    `patient_id`      INT UNSIGNED NULL     COMMENT 'FK users.id',
-    `export_token`    VARCHAR(80)  NULL     COMMENT 'Token from metadata.json',
-    `source_group_id` INT UNSIGNED NULL,
-    `import_metadata` JSON         NULL     COMMENT 'Full metadata.json for audit',
-    `created_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `id`              INT         NOT NULL AUTO_INCREMENT,
+    `export_id`       INT         NULL,
+    `share_id`        INT         NULL,
+    `imported_by`     INT         NOT NULL,
+    `patient_id`      INT         NULL,
+    `export_token`    VARCHAR(80) NULL,
+    `source_group_id` INT         NULL,
+    `import_metadata` JSON        NULL,
+    `created_at`      DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_si_importer` (`imported_by`),
     KEY `idx_si_patient`  (`patient_id`),
@@ -155,16 +234,19 @@ CREATE TABLE IF NOT EXISTS `share_imports` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='ZIP import provenance linked back to original share/export';
 
+
 -- ============================================================================
+-- CLEANUP helper procedures (optional — keeps DB clean)
+-- ============================================================================
+DROP PROCEDURE IF EXISTS clarus_add_column;
+DROP PROCEDURE IF EXISTS clarus_add_index;
+DROP PROCEDURE IF EXISTS clarus_add_fk;
+
 SET FOREIGN_KEY_CHECKS = 1;
+
 -- ============================================================================
--- DONE. What this script did:
---   - Fixed INT → INT UNSIGNED on parent_share_id and revoked_by
---   - Added FK fk_group_shares_parent (self-ref on group_shares)
---   - Added FK fk_group_shares_revoked_by (→ users)
---   - Added 3 indexes on group_shares
---   - Created group_share_records
---   - Created group_share_files
---   - Created share_exports
---   - Created share_imports
+-- DONE. Tables added:
+--   group_share_records, group_share_files, share_exports, share_imports
+-- Columns added to group_shares (if not already present):
+--   status, parent_share_id, can_delegate, accepted_at, revoked_at, revoked_by
 -- ============================================================================

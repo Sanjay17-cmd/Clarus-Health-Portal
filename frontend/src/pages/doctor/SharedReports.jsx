@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Layout from '../../components/layout/Layout'
 import Card from '../../components/ui/Card'
-import { sharesApi } from '../../api/shares'
+import { sharesApi } from '../../api'
 import { useToast } from '../../components/ui/Toast'
 import client from '../../api/client'
 

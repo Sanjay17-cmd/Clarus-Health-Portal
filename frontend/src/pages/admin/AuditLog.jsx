@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import Layout from '../../components/layout/Layout'
 import Card from '../../components/ui/Card'
-import { adminApi } from '../../api/admin'
+import { adminApi } from '../../api'
 import { StatusBadge } from '../../components/ui/Badge'
 
 const EVENT_TYPES = [

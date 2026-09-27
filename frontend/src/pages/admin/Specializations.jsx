@@ -8,7 +8,7 @@ import Loading from '../../components/ui/Loading'
 import EmptyState from '../../components/ui/EmptyState'
 import Badge from '../../components/ui/Badge'
 import { StatusBadge } from '../../components/ui/Badge'
-import { adminApi } from '../../api/admin'
+import { adminApi } from '../../api'
 import { useToast } from '../../components/ui/Toast'
 
 function SpecRow({ spec, onEdit, onToggle }) {

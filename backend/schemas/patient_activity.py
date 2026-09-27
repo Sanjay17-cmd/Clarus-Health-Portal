@@ -14,7 +14,6 @@ class AccessEventRead(BaseModel):
     actor_role: str | None = None
     event_type: str
     details: dict | None = None
-    break_glass_request_id: int | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

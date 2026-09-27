@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { requestDeletion } from '../../api/reports'
+import { requestDeletion } from '../../api'
 import { useToast } from '../ui/Toast'
 
 export default function DeleteRequestModal({ record, groupTitle, onClose, onSuccess }) {

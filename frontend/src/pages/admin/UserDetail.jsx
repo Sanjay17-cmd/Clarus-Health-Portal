@@ -5,7 +5,7 @@ import Card from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
 import { StatusBadge, RoleBadge } from '../../components/ui/Badge'
 import Loading from '../../components/ui/Loading'
-import { adminApi } from '../../api/admin'
+import { adminApi } from '../../api'
 import { useToast } from '../../components/ui/Toast'
 
 function InfoRow({ label, value }) {

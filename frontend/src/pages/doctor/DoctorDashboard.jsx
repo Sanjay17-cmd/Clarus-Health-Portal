@@ -6,10 +6,9 @@ import { StatusBadge } from '../../components/ui/Badge'
 import EmptyState from '../../components/ui/EmptyState'
 import RecordTypeTag from '../../components/reports/RecordTypeTag'
 import SecureViewer from '../../components/reports/SecureViewer'
-import BreakGlassModal from '../../components/reports/BreakGlassModal'
-import { reportsApi } from '../../api/reports'
-import { exportZip, importZip } from '../../api/archive'
-import { checkBreakGlassStatus } from '../../api/break_glass'
+import DoctorExportModal from '../../components/reports/DoctorExportModal'
+import { reportsApi } from '../../api'
+import { importZip } from '../../api'
 import { useToast } from '../../components/ui/Toast'
 
 export default function DoctorDashboard() {
@@ -18,8 +17,7 @@ export default function DoctorDashboard() {
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)
   const [viewFileId, setViewFileId] = useState(null)
-  const [breakGlassPatient, setBreakGlassPatient] = useState(null) // patient to request BG for
-  const [activeEmergencies, setActiveEmergencies] = useState({}) // patientId -> BG request
+  const [showExportModal, setShowExportModal] = useState(false)
   
   // Import state
   const [patients, setPatients] = useState([])
@@ -39,35 +37,6 @@ export default function DoctorDashboard() {
   const handleSelectGroup = (group) => {
     setSelectedGroup(group)
     reportsApi.getRecords(group.id).then(setRecords).catch(console.error)
-    // Check break-glass status for this group's patient
-    if (group.patient_id) {
-      checkBreakGlassStatus(group.patient_id)
-        .then(r => {
-          // Client interceptor unwraps res.data — r IS the response object directly
-          if (r.is_active) {
-            setActiveEmergencies(prev => ({ ...prev, [group.patient_id]: r.request }))
-          }
-        })
-        .catch(() => {})
-
-    }
-  }
-
-  const handleExport = async () => {
-    if (!selectedGroup) return
-    try {
-      const res = await exportZip(selectedGroup.id)
-      // Interceptor returns arraybuffer directly for binary responses — res IS the buffer
-      const url = URL.createObjectURL(new Blob([res]))
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `clarus_export_${selectedGroup.id}.zip`
-      a.click()
-      URL.revokeObjectURL(url)
-      toast.success('ZIP Export started')
-    } catch (e) {
-      toast.error('Export failed: You may not have download permission for this group.')
-    }
   }
 
   const handleImport = async (e) => {
@@ -167,25 +136,13 @@ export default function DoctorDashboard() {
               title={`${selectedGroup.title} Records`}
               action={
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <Button variant="secondary" onClick={handleExport}>📤 Export ZIP</Button>
-                  <button
-                    className="btn"
-                    style={{ background: '#dc2626', color: '#fff', fontWeight: 700, fontSize: '0.85rem' }}
-                    onClick={() => setBreakGlassPatient({ id: selectedGroup.patient_id, name: `Patient ${selectedGroup.patient_id}` })}
-                  >🚨 Break-Glass</button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowExportModal(true)}
+                  >📦 Download ZIP</Button>
                 </div>
               }
             >
-              {/* Emergency access badge */}
-              {activeEmergencies[selectedGroup.patient_id] && (
-                <div style={{ marginBottom: '1rem', padding: '0.75rem', borderRadius: 8, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span style={{ fontSize: '1.5rem' }}>🚨</span>
-                  <div>
-                    <div style={{ fontWeight: 700, color: '#f87171', fontSize: 14 }}>Emergency Override Active</div>
-                    <div style={{ fontSize: 12, color: 'rgba(248,113,113,0.7)' }}>View only — Downloads blocked. Expires: {new Date(activeEmergencies[selectedGroup.patient_id].expires_at).toLocaleTimeString()}</div>
-                  </div>
-                </div>
-              )}
               <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-surface-alt)', borderRadius: 8, fontSize: '0.9rem' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div><strong>Test Type:</strong> {selectedGroup.test_type}</div>
@@ -238,19 +195,14 @@ export default function DoctorDashboard() {
           files={viewFileId.files} 
           initialIndex={viewFileId.idx} 
           onClose={() => setViewFileId(null)} 
-          canDownload={!activeEmergencies[selectedGroup?.patient_id]}
+          canDownload={true}
         />
       )}
-
-      {breakGlassPatient && (
-        <BreakGlassModal
-          patient={breakGlassPatient}
-          onClose={() => setBreakGlassPatient(null)}
-          onGranted={(req) => {
-            setActiveEmergencies(prev => ({ ...prev, [req.patient_id]: req }))
-            // Reload records
-            if (selectedGroup) reportsApi.getRecords(selectedGroup.id).then(setRecords)
-          }}
+      {showExportModal && selectedGroup && (
+        <DoctorExportModal
+          group={selectedGroup}
+          records={records}
+          onClose={() => setShowExportModal(false)}
         />
       )}
     </Layout>

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
-import { notificationsApi } from '../../api/notifications'
+import { notificationsApi } from '../../api'
 import ThemeSwitcher from '../ui/ThemeSwitcher'
 
 function timeAgo(dateStr) {

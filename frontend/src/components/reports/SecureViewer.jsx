@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { viewFile, downloadFile } from '../../api/reports'
-import { getPublicFile } from '../../api/shares'
+import { viewFile, downloadFile } from '../../api'
+import { getPublicFile } from '../../api'
 
 const ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2, 3, 4]
 

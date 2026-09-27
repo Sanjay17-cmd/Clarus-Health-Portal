@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { sharesApi } from '../../api/shares'
+import { sharesApi } from '../../api'
 import { useToast } from '../ui/Toast'
 import Button from '../ui/Button'
 
