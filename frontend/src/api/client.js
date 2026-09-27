@@ -2,7 +2,8 @@ import axios from 'axios'
 
 const client = axios.create({
   baseURL: '/api',
-  headers: { 'Content-Type': 'application/json' },
+  // Do NOT set Content-Type globally — Axios auto-sets multipart/form-data for FormData
+  // and application/json for plain objects. Forcing it here breaks file uploads.
 })
 
 // Attach JWT to every request

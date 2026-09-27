@@ -24,8 +24,9 @@ export default function BreakGlassModal({ patient, onClose, onGranted }) {
         justification: justification.trim(),
         password
       })
-      toast.success(`Emergency access granted until ${new Date(res.data.expires_at).toLocaleTimeString()}`)
-      onGranted?.(res.data)
+      // Client interceptor already unwraps res.data — res IS the BG request object
+      toast.success(`Emergency access granted until ${new Date(res.expires_at).toLocaleTimeString()}`)
+      onGranted?.(res)
       onClose()
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Break-Glass denied')

@@ -57,10 +57,10 @@ export default function DoctorDashboard() {
     if (!selectedGroup) return
     try {
       const res = await exportZip(selectedGroup.id)
-      const url = URL.createObjectURL(new Blob([res.data]))
+      // Interceptor returns arraybuffer directly for binary responses — res IS the buffer
+      const url = URL.createObjectURL(new Blob([res]))
       const a = document.createElement('a')
       a.href = url
-      // The content-disposition header contains the real filename, but we can set a fallback
       a.download = `clarus_export_${selectedGroup.id}.zip`
       a.click()
       URL.revokeObjectURL(url)
