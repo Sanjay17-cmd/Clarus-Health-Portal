@@ -1,0 +1,15 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.34.0
+sqlalchemy>=2.0.30
+pymysql>=1.1.0
+cryptography>=44.0.0
+pydantic[email]>=2.10.0
+pydantic-settings>=2.7.0
+email-validator>=2.0.0
+python-jose[cryptography]>=3.3.0
+bcrypt>=4.0.0
+python-multipart>=0.0.20
+python-dotenv>=1.0.0
+qrcode[pil]>=7.4.2
+Pillow>=10.0.0
+aiofiles>=23.2.1
