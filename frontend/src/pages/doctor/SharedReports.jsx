@@ -131,8 +131,8 @@ function DelegateModal({ share, onClose, onSuccess }) {
           )}
         </div>
         <div className="modal__footer">
-          <button className="btn btn--secondary" onClick={onClose}>Cancel</button>
-          <button className="btn btn--primary" onClick={handleSubmit} disabled={!selected || submitting}>
+          <button className="btn btn-sm btn-glass" onClick={onClose}>Cancel</button>
+          <button className="btn btn-sm btn-glass btn-glass--teal" onClick={handleSubmit} disabled={!selected || submitting}>
             {submitting ? 'Delegating…' : '🔄 Delegate Access'}
           </button>
         </div>
@@ -172,7 +172,7 @@ function ShareCard({ share, onAccept, onDelegate, accepting }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', minWidth: 140 }}>
           {share.status === 'PENDING' && (
             <button
-              className="btn btn--primary btn--sm"
+              className="btn btn-sm btn-glass btn-glass--teal"
               onClick={() => onAccept(share.id)}
               disabled={accepting === share.id}
               style={{ width: '100%' }}
@@ -181,7 +181,7 @@ function ShareCard({ share, onAccept, onDelegate, accepting }) {
             </button>
           )}
           {share.status === 'ACCEPTED' && share.can_delegate && (
-            <button className="btn btn--secondary btn--sm" onClick={() => onDelegate(share)} style={{ width: '100%' }}>
+            <button className="btn btn-sm btn-glass btn-glass--teal" onClick={() => onDelegate(share)} style={{ width: '100%' }}>
               🔄 Delegate
             </button>
           )}
@@ -242,7 +242,7 @@ export default function SharedReports() {
         <div style={{ display: 'flex', gap: '0.4rem', alignSelf: 'center' }}>
           {[['ALL', `All (${shares.length})`], ['PENDING', `⏳ Pending (${pending.length})`], ['ACCEPTED', `✅ Accepted (${accepted.length})`]].map(([v, label]) => (
             <button key={v} onClick={() => setFilter(v)}
-              className={`btn btn--sm ${filter === v ? 'btn--primary' : 'btn--secondary'}`}>
+              className={`btn btn-sm ${filter === v ? 'btn-primary' : 'btn-glass'}`}>
               {label}
             </button>
           ))}

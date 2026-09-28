@@ -18,7 +18,7 @@ def export_zip(
     user: User = Depends(get_active_user),
     db: Session = Depends(get_db),
 ):
-    """Download a real ZIP of the report group. Doctors need can_download permission."""
+    """Download a report ZIP. Doctor downloads require one-use administrator approval."""
     if user.role not in (UserRole.DOCTOR, UserRole.PATIENT, UserRole.ADMIN):
         raise forbidden("Only doctors, patients, and admins can export archives")
     ids = [int(x) for x in record_ids.split(",") if x.strip().isdigit()] if record_ids else None

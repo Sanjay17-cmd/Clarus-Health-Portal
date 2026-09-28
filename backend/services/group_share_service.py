@@ -424,7 +424,8 @@ def record_share_export(
 
 def record_share_import(
     db: Session, imported_by: int, patient_id: int | None,
-    export_token: str | None, import_metadata: dict | None
+    export_token: str | None, import_metadata: dict | None,
+    source_group_id: int | None = None,
 ) -> ShareImport:
     # Try to find matching export by token
     export_id = None
@@ -441,6 +442,7 @@ def record_share_import(
         imported_by=imported_by,
         patient_id=patient_id,
         export_token=export_token,
+        source_group_id=source_group_id,
         import_metadata=import_metadata,
     )
     db.add(si)

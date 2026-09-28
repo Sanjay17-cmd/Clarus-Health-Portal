@@ -57,7 +57,9 @@ Clarus Health/
 │   ├── phase1_schema.sql   # Core users, roles, specializations
 │   ├── phase2_schema.sql   # Reports, files, permissions, shares
 │   ├── phase3A_schema.sql  # Corrections, deletions, archive provenance
-│   └── phase3B_schema.sql  # Break-Glass, disputes, access events
+│   ├── phase3B_schema.sql  # Break-Glass, disputes, access events
+│   ├── phase4_schema.sql   # Accepted, version-scoped group shares
+│   └── phase5_schema.sql   # Emergency shares and admin permission approvals
 └── README.md
 ```
 
@@ -69,19 +71,23 @@ Clarus Health/
 
 ### Prerequisites
 - MySQL 8.x running locally
-- A database named `clarusdb` (or configure via `.env`)
+- A database named `clarus_health` (the backend default; configure with `DB_NAME` in `.env` if needed)
 
 ### Execute phases in order:
 
 ```bash
-mysql -u root -p clarusdb < database/phase1_schema.sql
-mysql -u root -p clarusdb < database/phase2_schema.sql
-mysql -u root -p clarusdb < database/phase3A_schema.sql
-mysql -u root -p clarusdb < database/phase3B_schema.sql
+mysql -u root -p clarus_health < database/phase1_schema.sql
+mysql -u root -p clarus_health < database/phase2_schema.sql
+mysql -u root -p clarus_health < database/phase3A_schema.sql
+mysql -u root -p clarus_health < database/phase3B_schema.sql
+mysql -u root -p clarus_health < database/phase4_schema.sql
+mysql -u root -p clarus_health < database/phase5_schema.sql
 ```
 
+Phase 5 adds temporary view-only emergency shares and one-use administrator approvals for doctor downloads. A doctor needs an approved, unused download request for each file or ZIP download; emergency access and emergency shares expire with the four-hour break-glass session. Imported Clarus ZIPs retain their metadata and notify the patient.
+
 Or via MySQL Workbench:
-1. Open connection → `clarusdb` database
+1. Open connection → `clarus_health` database
 2. File → Run SQL Script → select each file in order
 
 ---

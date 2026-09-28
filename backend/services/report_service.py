@@ -1,6 +1,7 @@
 """Report service — Phase 1+2+3A (suspension-aware, correction-enforced)."""
 from datetime import datetime
 from fastapi import UploadFile
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session, joinedload
 from config import settings
 from core.exceptions import bad_request, forbidden, not_found
@@ -101,6 +102,11 @@ def get_records_for_group(db, group_id, viewer):
         raise forbidden()
 
     records = (db.query(ReportRecord).options(joinedload(ReportRecord.files)).filter(ReportRecord.group_id == group_id, ReportRecord.is_active == 1, ReportRecord.suspension_status == SuspensionStatus.ACTIVE).order_by(ReportRecord.record_date.desc()).all())
+    if viewer.role == UserRole.DOCTOR:
+        records = [record for record in records if _doctor_can_view_record(db, record, group, viewer)]
+        for record in records:
+            record.files = [file for file in record.files if _doctor_can_view_file(db, record, file.id, viewer)]
+    _attach_archive_metadata(db, group_id, records)
     # Enrich with corrects_record_date
     for r in records:
         if r.corrects_record_id:
@@ -117,6 +123,8 @@ def get_record_by_id(db, record_id, viewer):
         raise not_found("Report Record")
     group = get_group_by_id(db, record.group_id)
     _assert_can_view(db, record, group, viewer)
+    if viewer.role == UserRole.DOCTOR:
+        record.files = [file for file in record.files if _doctor_can_view_file(db, record, file.id, viewer)]
     audit_service.create_log(db, action="REPORT_RECORD_VIEWED", actor=viewer, target_type="ReportRecord", target_id=record.id, details={"group_id": record.group_id})
     db.commit()
     return record
@@ -126,13 +134,108 @@ def get_file_for_view(db, file_id, viewer):
     rf = _get_active_file(db, file_id)
     record, group = rf.record, rf.record.group
     _assert_can_view(db, record, group, viewer)
+    if viewer.role == UserRole.DOCTOR and not _doctor_can_view_file(db, record, rf.id, viewer):
+        raise forbidden("You do not have access to this file")
     data = storage.read(rf.stored_path)
     audit_service.create_log(db, action="FILE_VIEWED", actor=viewer, target_type="ReportFile", target_id=rf.id, details={"record_id": record.id, "original_name": rf.original_name})
+    if viewer.role == UserRole.DOCTOR:
+        archive_metadata = _get_archive_metadata_for_records(db, group.id, [record]).get(record.id)
+        if archive_metadata:
+            source_name = (archive_metadata.get("exported_by") or {}).get("name") or "an unknown doctor"
+            importing_doctor = (archive_metadata.get("imported_by") or {}).get("name") or "another doctor"
+            notification_service.create_notification(
+                db,
+                recipient_id=group.patient_id,
+                title="A Doctor Viewed a ZIP-Imported Report",
+                message=(f"Dr. {viewer.name} opened and viewed '{group.title}' from a ZIP archive originally exported by "
+                         f"{source_name}. The archive was imported by {importing_doctor}."),
+                type=NotificationType.DOCTOR_VIEWED,
+            )
     # Notify patient if technician is viewing
     if viewer.role == UserRole.LAB_TECHNICIAN:
         notification_service.create_notification(db, recipient_id=group.patient_id, title="Report Viewed by Lab Technician", message=f"Lab Technician {viewer.name} viewed your {group.title} report.", type=NotificationType.TECHNICIAN_VIEWED)
     db.commit()
     return rf, data
+
+
+def _attach_archive_metadata(db, group_id, records):
+    if records:
+        metadata_by_record = _get_archive_metadata_for_records(db, group_id, records)
+        for record in records:
+            record.__dict__["archive_metadata"] = metadata_by_record.get(record.id)
+
+
+def get_archive_metadata_for_record(db, record) -> dict | None:
+    return _get_archive_metadata_for_records(db, record.group_id, [record]).get(record.id)
+
+
+def _get_archive_metadata_for_records(db, group_id, records) -> dict[int, dict]:
+    if not records:
+        return {}
+    from models.group_share import ShareImport
+
+    record_ids = {record.id for record in records}
+    result = {}
+
+    def attach_source(source, import_mapping, imported_ids, imported_by, imported_at):
+        if import_mapping.get("group_id") != group_id:
+            return
+        imported_ids = [int(value) for value in (imported_ids or [])]
+        matching_records = record_ids.intersection(imported_ids)
+        if not matching_records:
+            return
+        source_records = source.get("records") or []
+        files = source.get("files") or []
+        exported_by = source.get("exported_by") or {}
+        for index, imported_record_id in enumerate(imported_ids):
+            if imported_record_id not in matching_records or imported_record_id in result:
+                continue
+            source_record = source_records[index] if index < len(source_records) else {}
+            original_record_id = source_record.get("id")
+            record_files = [item for item in files if str(item.get("record_id")) == str(original_record_id)]
+            result[imported_record_id] = {
+                "clarus_export_version": source.get("clarus_export_version"),
+                "export_id": source.get("export_id") or zip_import.original_export_id,
+                "export_token": source.get("export_token"),
+                "exported_at": source.get("exported_at"),
+                "exported_by": exported_by,
+                "imported_at": imported_at,
+                "imported_by": import_mapping.get("imported_by") or imported_by,
+                "patient": source.get("patient"),
+                "report_group": source.get("report_group"),
+                "lab_technician": source.get("lab_technician"),
+                "record": source_record,
+                "files": record_files,
+            }
+
+    patient_id = db.query(ReportGroup.patient_id).filter(ReportGroup.id == group_id).scalar()
+    share_imports = db.query(ShareImport).filter(ShareImport.patient_id == patient_id).order_by(ShareImport.created_at.desc()).all()
+    for source_import in share_imports:
+        source = source_import.import_metadata if isinstance(source_import.import_metadata, dict) else {}
+        import_mapping = source.get("_clarus_import") or {}
+        if import_mapping:
+            attach_source(source, import_mapping, import_mapping.get("record_ids_imported"),
+                          source_import.importer.name if source_import.importer else None,
+                          source_import.created_at.isoformat() if source_import.created_at else None)
+
+    if len(result) < len(record_ids) and "group_id" in {column["name"] for column in inspect(db.get_bind()).get_columns("zip_imports")}:
+        from models.archive import ZipImport
+        imports = db.query(ZipImport).filter(ZipImport.group_id == group_id).order_by(ZipImport.created_at.desc()).all()
+        for zip_import in imports:
+            imported_ids = [int(value) for value in (zip_import.record_ids_imported or [])]
+            source_import = next((item for item in share_imports if
+                item.imported_by == zip_import.imported_by and
+                item.patient_id == zip_import.patient_id and
+                item.export_token == zip_import.original_export_id), None)
+            source = source_import.import_metadata if source_import and isinstance(source_import.import_metadata, dict) else {}
+            import_mapping = {
+                "group_id": group_id,
+                "imported_by": {"id": zip_import.imported_by, "name": zip_import.importer.name if zip_import.importer else None},
+            }
+            attach_source(source, import_mapping, imported_ids,
+                          import_mapping["imported_by"],
+                          zip_import.created_at.isoformat() if zip_import.created_at else None)
+    return result
 
 
 def get_file_for_download(db, file_id, viewer):
@@ -145,8 +248,12 @@ def get_file_for_download(db, file_id, viewer):
     elif viewer.role == UserRole.LAB_TECHNICIAN:
         pass
     elif viewer.role == UserRole.DOCTOR:
-        if not _doctor_can_download(db, record, group, viewer):
-            raise forbidden("You do not have download permission for this record")
+        _assert_can_view(db, record, group, viewer)
+        if not _doctor_can_view_file(db, record, rf.id, viewer):
+            raise forbidden("You do not have access to this file")
+        from services.break_glass_service import consume_download_permission
+        if not consume_download_permission(db, viewer, group.id):
+            raise forbidden("Administrator approval is required for every doctor download")
     else:
         raise forbidden()
     data = storage.read(rf.stored_path)
@@ -188,20 +295,60 @@ def get_groups_accessible_to_doctor(db, doctor):
         group_ids_rp = set()
 
     all_group_ids = group_ids_gs | group_ids_rp
-    if not all_group_ids:
-        return []
-
-    groups = db.query(ReportGroup).options(joinedload(ReportGroup.records)).filter(ReportGroup.id.in_(all_group_ids), ReportGroup.is_active == 1).all()
     result = []
-    for g in groups:
-        from services.group_share_service import get_accessible_records_for_doctor
-        gs_recs = get_accessible_records_for_doctor(db, g.id, doctor)
-        if gs_recs is not None:
-            active = gs_recs
-        else:
-            active = [r for r in g.records if r.is_active and r.suspension_status == SuspensionStatus.ACTIVE and r.id in record_ids_perm]
-        latest = max((r.record_date for r in active), default=None)
-        result.append({"id": g.id, "patient_id": g.patient_id, "title": g.title, "test_type": g.test_type, "description": g.description, "is_active": bool(g.is_active), "created_by": g.created_by, "created_at": g.created_at, "updated_at": g.updated_at, "record_count": len(active), "latest_record_date": latest})
+    if all_group_ids:
+        groups = db.query(ReportGroup).options(joinedload(ReportGroup.records)).filter(ReportGroup.id.in_(all_group_ids), ReportGroup.is_active == 1).all()
+        for g in groups:
+            from services.group_share_service import get_accessible_records_for_doctor
+            gs_recs = get_accessible_records_for_doctor(db, g.id, doctor)
+            if gs_recs is not None:
+                active = gs_recs
+            else:
+                active = [r for r in g.records if r.is_active and r.suspension_status == SuspensionStatus.ACTIVE and r.id in record_ids_perm]
+            latest = max((r.record_date for r in active), default=None)
+            result.append({"id": g.id, "patient_id": g.patient_id, "title": g.title, "test_type": g.test_type, "description": g.description, "is_active": bool(g.is_active), "created_by": g.created_by, "created_at": g.created_at, "updated_at": g.updated_at, "record_count": len(active), "latest_record_date": latest})
+
+    from models.break_glass import BreakGlassRequest, BreakGlassShare, BreakGlassStatus
+    now = datetime.utcnow()
+    emergency_requests = db.query(BreakGlassRequest).filter(
+        BreakGlassRequest.doctor_id == doctor.id,
+        BreakGlassRequest.status == BreakGlassStatus.ACTIVE,
+        BreakGlassRequest.expires_at > now,
+    ).all()
+    emergency_request_by_group = {}
+    if emergency_requests:
+        patient_ids = {req.patient_id for req in emergency_requests}
+        emergency_groups = db.query(ReportGroup).options(joinedload(ReportGroup.records)).filter(
+            ReportGroup.patient_id.in_(patient_ids), ReportGroup.is_active == 1).all()
+        request_by_patient = {req.patient_id: req for req in emergency_requests}
+        for group in emergency_groups:
+            emergency_request_by_group[group.id] = request_by_patient[group.patient_id]
+
+    received_shares = db.query(BreakGlassShare).join(BreakGlassRequest).filter(
+        BreakGlassShare.recipient_id == doctor.id,
+        BreakGlassRequest.status == BreakGlassStatus.ACTIVE,
+        BreakGlassRequest.expires_at > now,
+    ).all()
+    for share in received_shares:
+        request = db.query(BreakGlassRequest).filter(BreakGlassRequest.id == share.request_id).first()
+        if request:
+            emergency_request_by_group.setdefault(share.group_id, request)
+
+    existing_group_ids = {item["id"] for item in result}
+    missing_emergency_ids = set(emergency_request_by_group) - existing_group_ids
+    if missing_emergency_ids:
+        groups = db.query(ReportGroup).options(joinedload(ReportGroup.records)).filter(
+            ReportGroup.id.in_(missing_emergency_ids), ReportGroup.is_active == 1).all()
+        for group in groups:
+            active = [r for r in group.records if r.is_active and r.suspension_status == SuspensionStatus.ACTIVE]
+            request = emergency_request_by_group[group.id]
+            result.append({"id": group.id, "patient_id": group.patient_id, "title": group.title,
+                "test_type": group.test_type, "description": group.description, "is_active": bool(group.is_active),
+                "created_by": group.created_by, "created_at": group.created_at, "updated_at": group.updated_at,
+                "record_count": len(active), "latest_record_date": max((r.record_date for r in active), default=None),
+                "emergency_access": True, "break_glass_request_id": request.id,
+                "break_glass_doctor_id": request.doctor_id,
+                "can_emergency_share": request.doctor_id == doctor.id})
     return result
 
 
@@ -225,17 +372,44 @@ def _assert_can_view(db, record, group, viewer):
     if viewer.role == UserRole.PATIENT and group.patient_id == viewer.id:
         return
     if viewer.role == UserRole.DOCTOR:
-        # Group share
-        from services.group_share_service import get_accessible_records_for_doctor
-        gs_recs = get_accessible_records_for_doctor(db, record.group_id, viewer)
-        if gs_recs is not None and any(r.id == record.id for r in gs_recs):
-            return
-        # Per-record perm
-        perm = _find_perm(db, record.id, viewer)
-        if perm and perm.can_view:
+        if _doctor_can_view_record(db, record, group, viewer):
             return
         raise forbidden("You do not have access to this record")
     raise forbidden()
+
+
+def _doctor_can_view_record(db, record, group, doctor):
+    from services.break_glass_service import get_active_access
+    if get_active_access(db, doctor.id, group.patient_id, group.id):
+        return True
+    from services.group_share_service import get_accessible_records_for_doctor
+    shared_records = get_accessible_records_for_doctor(db, record.group_id, doctor)
+    if shared_records is not None and any(item.id == record.id for item in shared_records):
+        return True
+    permission = _find_perm(db, record.id, doctor)
+    return bool(permission and permission.can_view)
+
+
+def _doctor_can_view_file(db, record, file_id, doctor):
+    if not _doctor_can_view_record(db, record, record.group, doctor):
+        return False
+    from services.break_glass_service import get_active_access
+    if get_active_access(db, doctor.id, record.group.patient_id, record.group_id):
+        return True
+    from services.group_share_service import (
+        _find_active_share_for_doctor,
+        _get_allowed_file_ids_for_record,
+        get_accessible_records_for_doctor,
+    )
+    share = _find_active_share_for_doctor(db, record.group_id, doctor)
+    if share:
+        records = get_accessible_records_for_doctor(db, record.group_id, doctor)
+        if records is not None and any(item.id == record.id for item in records):
+            allowed_file_ids = _get_allowed_file_ids_for_record(db, share, record.id)
+            if allowed_file_ids is None or file_id in allowed_file_ids:
+                return True
+    permission = _find_perm(db, record.id, doctor)
+    return bool(permission and permission.can_view)
 
 
 def _doctor_can_download(db, record, group, doctor):
@@ -257,6 +431,10 @@ def _find_perm(db, record_id, doctor):
 
 
 def _assert_doctor_access(db, group_id, doctor):
+    group = get_group_by_id(db, group_id)
+    from services.break_glass_service import get_active_access
+    if get_active_access(db, doctor.id, group.patient_id, group.id):
+        return
     from models.share import ReportPermission, GranteeType
     from models.group_share import GroupShare, GroupGranteeType
     from sqlalchemy import or_

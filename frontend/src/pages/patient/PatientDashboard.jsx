@@ -179,12 +179,12 @@ export default function PatientDashboard() {
                         {r.suspension_status === 'ACTIVE' && (
                           <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                             {/* Share THIS specific version */}
-                            <button className="btn btn--sm btn--primary" onClick={() => setShareRecord(r)} title="Share this specific version">
+                            <button className="btn btn-sm btn-glass btn-glass--teal" onClick={() => setShareRecord(r)} title="Share this specific version">
                               🤝 Share Version
                             </button>
-                            <button className="btn btn--sm btn--secondary" onClick={() => setQrRecord(r)}>🔗 QR/Link</button>
-                            <button className="btn btn--sm btn--secondary" style={{ color: '#f59e0b' }} onClick={() => setDisputeRecord(r)}>📋 Dispute</button>
-                            <button className="btn btn--sm btn--secondary" style={{ color: '#ef4444' }} onClick={() => setDeleteRequestRecord(r)}>🗑 Delete</button>
+                            <button className="btn btn-sm btn-glass" onClick={() => setQrRecord(r)}>🔗 QR/Link</button>
+                            <button className="btn btn-sm btn-glass btn-glass--amber" onClick={() => setDisputeRecord(r)}>📋 Dispute</button>
+                            <button className="btn btn-sm btn-glass btn-glass--red" onClick={() => setDeleteRequestRecord(r)}>🗑 Delete</button>
                           </div>
                         )}
                       </div>
@@ -197,6 +197,13 @@ export default function PatientDashboard() {
                         )}
                         {r.notes && <div style={{ marginTop: '0.4rem', fontStyle: 'italic' }}>"{r.notes}"</div>}
                       </div>
+
+                      {r.archive_metadata && (
+                        <details style={{ marginBottom: '0.75rem', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-surface-alt)' }}>
+                          <summary style={{ padding: '0.65rem 0.8rem', cursor: 'pointer', fontWeight: 600 }}>Original ZIP details</summary>
+                          <pre style={{ margin: 0, padding: '0.8rem', maxHeight: 280, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 12, color: 'var(--text-muted)' }}>{JSON.stringify(r.archive_metadata, null, 2)}</pre>
+                        </details>
+                      )}
 
                       {/* Files */}
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>

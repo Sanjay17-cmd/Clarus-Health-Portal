@@ -3,7 +3,6 @@
 -- Uses stored procedures to check INFORMATION_SCHEMA before adding columns.
 -- Run each CALL statement one at a time if you prefer, or run all at once.
 -- ============================================================================
-USE clarus_health;
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 

@@ -23,6 +23,7 @@ import uuid
 import zipfile
 from datetime import datetime, timezone
 
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session, joinedload
 
 from config import settings
@@ -50,8 +51,8 @@ def export_zip(
     """
     Build a real ZIP for the given group + optional record_ids subset.
     Returns (zip_bytes, export_id).
-    Only doctors with can_download (via GroupShare or per-record perm) and patients who own
-    the group may export. Admins may always export.
+    Doctors need active view access and a one-use administrator approval. Patients who own
+    the group and admins may export without that approval.
     """
     group = db.query(ReportGroup).options(
         joinedload(ReportGroup.patient)
@@ -78,8 +79,23 @@ def export_zip(
     if record_ids:
         id_set = set(record_ids)
         records = [r for r in all_records if r.id in id_set]
+        if len(records) != len(id_set):
+            raise bad_request("One or more selected records are not active in this report group")
     else:
         records = all_records
+
+    if exporter.role == UserRole.DOCTOR:
+        from fastapi import HTTPException
+        from services.report_service import _assert_can_view
+        accessible_records = []
+        for record in records:
+            try:
+                _assert_can_view(db, record, group, exporter)
+                accessible_records.append(record)
+            except HTTPException:
+                if record_ids:
+                    raise forbidden("You do not have view access to every selected record")
+        records = accessible_records
 
     if not records:
         raise bad_request("No accessible records to export")
@@ -98,6 +114,9 @@ def export_zip(
 
         for record in records:
             active_files = [f for f in record.files if f.is_active]
+            if exporter.role == UserRole.DOCTOR:
+                from services.report_service import _doctor_can_view_file
+                active_files = [rf for rf in active_files if _doctor_can_view_file(db, record, rf.id, exporter)]
             total_files += len(active_files)
             if primary_tech_id is None and active_files:
                 primary_tech_id = active_files[0].uploaded_by
@@ -167,21 +186,41 @@ def export_zip(
             },
             "files": file_metadata,
         }
-        zf.writestr(f"{prefix}metadata.json", json.dumps(meta, indent=2, default=str))
+        metadata_json = json.dumps(meta, indent=2, default=str)
+        zf.writestr(f"{prefix}metadata.json", metadata_json)
 
     zip_bytes = buf.getvalue()
+    metadata_hash = hashlib.sha256(metadata_json.encode("utf-8")).hexdigest()
 
     # Persist provenance
-    ze = ZipExport(
-        id=export_id,
-        exported_by=exporter.id,
-        patient_id=group.patient_id,
-        group_id=group_id,
-        record_ids=[r.id for r in records],
-        file_count=total_files,
-        technician_id=primary_tech_id,
-    )
-    db.add(ze)
+    if _uses_legacy_zip_export_schema(db):
+        db.execute(text("""
+            INSERT INTO zip_exports
+                (export_uuid, exported_by, patient_id, group_id, record_id,
+                 file_count, metadata_hash, zip_size_bytes)
+            VALUES
+                (:export_uuid, :exported_by, :patient_id, :group_id, :record_id,
+                 :file_count, :metadata_hash, :zip_size_bytes)
+        """), {
+            "export_uuid": export_id,
+            "exported_by": exporter.id,
+            "patient_id": group.patient_id,
+            "group_id": group_id,
+            "record_id": records[0].id,
+            "file_count": total_files,
+            "metadata_hash": metadata_hash,
+            "zip_size_bytes": len(zip_bytes),
+        })
+    else:
+        db.add(ZipExport(
+            id=export_id,
+            exported_by=exporter.id,
+            patient_id=group.patient_id,
+            group_id=group_id,
+            record_ids=[r.id for r in records],
+            file_count=total_files,
+            technician_id=primary_tech_id,
+        ))
 
     # Notify patient if doctor exported
     if exporter.role == UserRole.DOCTOR:
@@ -195,8 +234,8 @@ def export_zip(
 
     audit_service.create_log(
         db, action="ZIP_EXPORTED", actor=exporter,
-        target_type="ZipExport", target_id=export_id,
-        details={"group_id": group_id, "record_count": len(records), "file_count": total_files},
+        target_type="ZipExport", target_id=None,
+        details={"export_id": export_id, "group_id": group_id, "record_count": len(records), "file_count": total_files},
     )
     db.commit()
     return zip_bytes, export_id
@@ -261,9 +300,14 @@ def import_zip(
     # Check for duplicate import
     original_export_id = meta.get("export_id")
     if original_export_id:
-        dup = db.query(ZipImport).filter(
-            ZipImport.original_export_id == original_export_id
-        ).first()
+        if _uses_legacy_zip_import_schema(db):
+            dup = db.execute(text(
+                "SELECT 1 FROM zip_imports WHERE source_export_uuid=:export_id LIMIT 1"
+            ), {"export_id": original_export_id}).first()
+        else:
+            dup = db.query(ZipImport).filter(
+                ZipImport.original_export_id == original_export_id
+            ).first()
         if dup:
             raise bad_request(
                 f"This ZIP was already imported (import ID: {dup.id}). "
@@ -297,6 +341,7 @@ def import_zip(
 
     imported_record_ids = []
     total_files = 0
+    original_exporter_name = meta.get("exported_by", {}).get("name", "Unknown")
     original_exporter_id: int | None = None
     try:
         original_exporter_id = int(meta["exported_by"]["id"])
@@ -316,6 +361,27 @@ def import_zip(
         db.add(record)
         db.flush()
         imported_record_ids.append(record.id)
+
+        from models.share import GranteeType, ReportPermission
+        db.add(ReportPermission(
+            record_id=record.id,
+            granted_by=importer.id,
+            grantee_type=GranteeType.USER,
+            grantee_user_id=importer.id,
+            can_view=1,
+            can_download=0,
+            can_share=0,
+        ))
+        from models.access_event import RecordAccessEvent
+        db.add(RecordAccessEvent(
+            record_id=record.id,
+            group_id=group.id,
+            patient_id=patient_id,
+            actor_id=importer.id,
+            actor_role=importer.role.value,
+            event_type="ZIP_IMPORTED",
+            details={"original_exporter": original_exporter_name},
+        ))
 
         # Find files belonging to this record in the ZIP
         for entry_name in names:
@@ -359,48 +425,70 @@ def import_zip(
             total_files += 1
 
     import_id = str(uuid.uuid4())
-    zi = ZipImport(
-        id=import_id,
-        original_export_id=original_export_id,
-        imported_by=importer.id,
-        patient_id=patient_id,
-        group_id=group.id,
-        original_exporter_id=original_exporter_id,
-        record_ids_imported=imported_record_ids,
-        file_count=total_files,
-        import_notes=import_notes,
-    )
-    db.add(zi)
-
-    # Phase 4: Write share provenance row to share_imports
-    try:
-        from services.group_share_service import record_share_import
-        export_token = meta.get("export_token") or meta.get("export_id")
-        record_share_import(
-            db,
+    import_mapping = {
+        "group_id": group.id,
+        "record_ids_imported": imported_record_ids,
+        "import_notes": import_notes,
+        "imported_by": {"id": importer.id, "name": importer.name},
+    }
+    meta["_clarus_import"] = import_mapping
+    if _uses_legacy_zip_import_schema(db):
+        db.execute(text("""
+            INSERT INTO zip_imports
+                (import_uuid, source_export_uuid, imported_by, patient_id,
+                 original_exporter_id, status, record_id, file_count)
+            VALUES
+                (:import_uuid, :source_export_uuid, :imported_by, :patient_id,
+                 :original_exporter_id, 'VALIDATED', :record_id, :file_count)
+        """), {
+            "import_uuid": import_id,
+            "source_export_uuid": original_export_id,
+            "imported_by": importer.id,
+            "patient_id": patient_id,
+            "original_exporter_id": original_exporter_id,
+            "record_id": imported_record_ids[0] if imported_record_ids else None,
+            "file_count": total_files,
+        })
+    else:
+        db.add(ZipImport(
+            id=import_id,
+            original_export_id=original_export_id,
             imported_by=importer.id,
             patient_id=patient_id,
-            export_token=export_token,
-            import_metadata=meta,
-        )
-    except Exception:
-        pass  # Never block import due to provenance error
+            group_id=group.id,
+            original_exporter_id=original_exporter_id,
+            record_ids_imported=imported_record_ids,
+            file_count=total_files,
+            import_notes=import_notes,
+        ))
+
+    # Preserve the source JSON as provenance; imported report details depend on it.
+    from services.group_share_service import record_share_import
+    export_token = meta.get("export_token") or meta.get("export_id")
+    record_share_import(
+        db,
+        imported_by=importer.id,
+        patient_id=patient_id,
+        export_token=export_token,
+        import_metadata=meta,
+        source_group_id=group.id,
+    )
 
     # Notify patient
 
-    orig_name = meta.get("exported_by", {}).get("name", "Unknown")
     notification_service.create_notification(
         db,
         recipient_id=patient_id,
         title="Records Imported Into Your Profile",
-        message=f"Dr. {importer.name} imported records previously exported by {orig_name}.",
+        message=f"Dr. {importer.name} imported records previously exported by {original_exporter_name}. The importing doctor has view-only access; downloads still require administrator approval.",
         type=NotificationType.ZIP_IMPORTED,
     )
 
     audit_service.create_log(
         db, action="ZIP_IMPORTED", actor=importer,
-        target_type="ZipImport", target_id=import_id,
+        target_type="ZipImport", target_id=None,
         details={
+            "import_id": import_id,
             "original_export_id": original_export_id,
             "patient_id": patient_id,
             "records_imported": len(imported_record_ids),
@@ -430,10 +518,47 @@ def import_zip(
 # ── Admin listing ─────────────────────────────────────────────────────────────
 
 def list_exports(db: Session) -> list[dict]:
+    if _uses_legacy_zip_export_schema(db):
+        rows = db.execute(text("""
+            SELECT ze.export_uuid AS id, ze.exported_by,
+                   exporter.name AS exporter_name,
+                   ze.patient_id, patient.name AS patient_name,
+                   ze.group_id, report_group.title AS group_title,
+                   ze.record_id, ze.file_count,
+                   record.lab_technician_id AS technician_id,
+                   record.lab_technician_name AS technician_name,
+                   ze.created_at
+            FROM zip_exports AS ze
+            LEFT JOIN users AS exporter ON exporter.id = ze.exported_by
+            LEFT JOIN users AS patient ON patient.id = ze.patient_id
+            LEFT JOIN report_groups AS report_group ON report_group.id = ze.group_id
+            LEFT JOIN report_records AS record ON record.id = ze.record_id
+            ORDER BY ze.created_at DESC
+            LIMIT 500
+        """)).mappings().all()
+        return [
+            {
+                "id": row["id"],
+                "exported_by": row["exported_by"],
+                "exporter_name": row["exporter_name"] or "",
+                "patient_id": row["patient_id"],
+                "patient_name": row["patient_name"] or "",
+                "group_id": row["group_id"],
+                "group_title": row["group_title"] or "",
+                "record_ids": [row["record_id"]],
+                "file_count": row["file_count"],
+                "technician_id": row["technician_id"],
+                "technician_name": row["technician_name"],
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
+
     rows = db.query(ZipExport).options(
         joinedload(ZipExport.exporter),
         joinedload(ZipExport.patient),
         joinedload(ZipExport.group),
+        joinedload(ZipExport.record),
     ).order_by(ZipExport.created_at.desc()).limit(500).all()
 
     return [
@@ -455,7 +580,64 @@ def list_exports(db: Session) -> list[dict]:
     ]
 
 
+def _uses_legacy_zip_export_schema(db: Session) -> bool:
+    return "export_uuid" in {column["name"] for column in inspect(db.get_bind()).get_columns("zip_exports")}
+
+
+def _uses_legacy_zip_import_schema(db: Session) -> bool:
+    return "source_export_uuid" in {column["name"] for column in inspect(db.get_bind()).get_columns("zip_imports")}
+
+
 def list_imports(db: Session) -> list[dict]:
+    if _uses_legacy_zip_import_schema(db):
+        rows = db.execute(text("""
+            SELECT zi.import_uuid AS id, zi.source_export_uuid AS original_export_id,
+                   zi.imported_by, importer.name AS importer_name,
+                   zi.patient_id, patient.name AS patient_name,
+                   zi.original_exporter_id,
+                   original_exporter.name AS original_exporter_name,
+                   zi.record_id, zi.file_count, zi.created_at
+            FROM zip_imports AS zi
+            LEFT JOIN users AS importer ON importer.id = zi.imported_by
+            LEFT JOIN users AS patient ON patient.id = zi.patient_id
+            LEFT JOIN users AS original_exporter ON original_exporter.id = zi.original_exporter_id
+            ORDER BY zi.created_at DESC
+            LIMIT 500
+        """)).mappings().all()
+        from models.group_share import ShareImport
+
+        result = []
+        for row in rows:
+            source_import = db.query(ShareImport).filter(
+                ShareImport.imported_by == row["imported_by"],
+                ShareImport.patient_id == row["patient_id"],
+                ShareImport.export_token == row["original_export_id"],
+            ).order_by(ShareImport.created_at.desc()).first()
+            source = source_import.import_metadata if source_import and isinstance(source_import.import_metadata, dict) else {}
+            mapping = source.get("_clarus_import") or {}
+            group_id = mapping.get("group_id") or (source_import.source_group_id if source_import else None)
+            if not group_id and row["record_id"]:
+                group_id = db.execute(text("SELECT group_id FROM report_records WHERE id=:id"), {"id": row["record_id"]}).scalar()
+            group_title = db.execute(text("SELECT title FROM report_groups WHERE id=:id"), {"id": group_id}).scalar() if group_id else None
+            exporter = source.get("exported_by") or {}
+            result.append({
+                "id": row["id"],
+                "original_export_id": row["original_export_id"],
+                "imported_by": row["imported_by"],
+                "importer_name": row["importer_name"] or "",
+                "patient_id": row["patient_id"],
+                "patient_name": row["patient_name"] or "",
+                "group_id": group_id,
+                "group_title": group_title,
+                "original_exporter_id": exporter.get("id") or row["original_exporter_id"],
+                "original_exporter_name": exporter.get("name") or row["original_exporter_name"],
+                "record_ids_imported": mapping.get("record_ids_imported") or ([row["record_id"]] if row["record_id"] else []),
+                "file_count": row["file_count"],
+                "import_notes": mapping.get("import_notes"),
+                "created_at": row["created_at"],
+            })
+        return result
+
     rows = db.query(ZipImport).options(
         joinedload(ZipImport.importer),
         joinedload(ZipImport.patient),
@@ -491,29 +673,12 @@ def _assert_can_export(db: Session, group: ReportGroup, exporter: User) -> None:
     if exporter.role == UserRole.PATIENT and group.patient_id == exporter.id:
         return
     if exporter.role == UserRole.DOCTOR:
-        from services.group_share_service import get_doctor_download_permission
-        if get_doctor_download_permission(db, group.id, exporter):
+        from services.report_service import _assert_doctor_access
+        from services.break_glass_service import consume_download_permission
+        _assert_doctor_access(db, group.id, exporter)
+        if consume_download_permission(db, exporter, group.id):
             return
-        # Also check per-record permissions
-        from models.share import ReportPermission, GranteeType
-        from sqlalchemy import or_
-        record_ids = db.query(ReportRecord.id).filter(
-            ReportRecord.group_id == group.id,
-            ReportRecord.is_active == 1,
-        ).all()
-        rid_list = [r.id for r in record_ids]
-        if rid_list:
-            perm = db.query(ReportPermission).filter(
-                ReportPermission.record_id.in_(rid_list),
-                ReportPermission.can_download == 1,
-                or_(
-                    (ReportPermission.grantee_type == GranteeType.USER) & (ReportPermission.grantee_user_id == exporter.id),
-                    (ReportPermission.grantee_type == GranteeType.SPECIALIZATION) & (ReportPermission.grantee_spec_id == exporter.specialization_id),
-                )
-            ).first()
-            if perm:
-                return
-        raise forbidden("You do not have download permission for this report group")
+        raise forbidden("Administrator approval is required for every doctor download")
     raise forbidden()
 
 

@@ -396,6 +396,52 @@ img, svg { display: block; }
   transform: translateY(-1px);
 }
 
+.btn-glass {
+  border: 1px solid rgba(255,255,255,0.38);
+  border-radius: 999px;
+  background: linear-gradient(145deg, rgba(255,255,255,0.68), rgba(255,255,255,0.16));
+  color: var(--text-primary);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.68) inset,
+    0 -1px 0 rgba(0,0,0,0.08) inset,
+    0 4px 10px rgba(20,30,45,0.12);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+.btn-glass:hover:not(:disabled) {
+  background: linear-gradient(145deg, rgba(255,255,255,0.82), rgba(255,255,255,0.28));
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.78) inset,
+    0 -1px 0 rgba(0,0,0,0.08) inset,
+    0 7px 16px rgba(20,30,45,0.16);
+  transform: translateY(-1px);
+}
+.btn-glass--teal {
+  border-color: rgba(13,169,167,0.34);
+  background: linear-gradient(145deg, rgba(13,169,167,0.24), rgba(13,169,167,0.08));
+  color: var(--brand-primary);
+}
+.btn-glass--amber {
+  border-color: rgba(217,119,6,0.32);
+  background: linear-gradient(145deg, rgba(245,158,11,0.22), rgba(245,158,11,0.07));
+  color: #a65300;
+}
+.btn-glass--red {
+  border-color: rgba(239,68,68,0.3);
+  background: linear-gradient(145deg, rgba(239,68,68,0.2), rgba(239,68,68,0.06));
+  color: #b42318;
+}
+.btn-glass--teal:hover:not(:disabled) {
+  background: linear-gradient(145deg, rgba(13,169,167,0.34), rgba(13,169,167,0.13));
+}
+.btn-glass--amber:hover:not(:disabled) {
+  background: linear-gradient(145deg, rgba(245,158,11,0.32), rgba(245,158,11,0.12));
+}
+.btn-glass--red:hover:not(:disabled) {
+  background: linear-gradient(145deg, rgba(239,68,68,0.3), rgba(239,68,68,0.12));
+}
+
 /* Ghost */
 .btn-ghost {
   background: var(--bg-surface);
@@ -1517,7 +1563,7 @@ img, svg { display: block; }
 }
 
 /* ==========================================================================
-   Phase 3A UI Styles — Extends existing variables
+   Phase 3A UI Styles ï¿½ Extends existing variables
    ========================================================================== */
 
 /* File Upload Dropzone */
@@ -1678,7 +1724,7 @@ img, svg { display: block; }
 }
 
 /* ==========================================================================
-   Phase 3B UI Styles — Emergency Access & Disputes
+   Phase 3B UI Styles ï¿½ Emergency Access & Disputes
    ========================================================================== */
 
 /* Emergency / Break-Glass pulsing badge */
@@ -1818,7 +1864,7 @@ img, svg { display: block; }
 }
 
 /* ==========================================================================
-   Phase 4 — Responsive Mobile + Sidebar Polish
+   Phase 4 ï¿½ Responsive Mobile + Sidebar Polish
    ========================================================================== */
 
 /* Sidebar overlay (mobile) */
@@ -1951,7 +1997,7 @@ img, svg { display: block; }
 }
 
 /* ==========================================================================
-   Phase 4 — 3D Depth card improvements
+   Phase 4 ï¿½ 3D Depth card improvements
    ========================================================================== */
 
 /* Cards pulse outline on hover  */

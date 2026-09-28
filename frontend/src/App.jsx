@@ -38,6 +38,7 @@ import AdminArchive from './pages/admin/AdminArchive'
 
 // Phase 3B
 import AdminDisputes from './pages/admin/AdminDisputes'
+import AdminApprovals from './pages/admin/AdminApprovals'
 import PatientActivity from './pages/patient/PatientActivity'
 
 export default function App() {
@@ -95,6 +96,9 @@ export default function App() {
               } />
               <Route path="/admin/disputes" element={
                 <ProtectedRoute><RoleRoute role="ADMIN"><AdminDisputes /></RoleRoute></ProtectedRoute>
+              } />
+              <Route path="/admin/approvals" element={
+                <ProtectedRoute><RoleRoute role="ADMIN"><AdminApprovals /></RoleRoute></ProtectedRoute>
               } />
 
               {/* Doctor routes */}

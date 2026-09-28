@@ -11,6 +11,7 @@ const NAV = {
     { label: 'Suspended Records',   icon: '🔒', to: '/admin/suspended' },
     { label: 'Archive Provenance',  icon: '🗃️', to: '/admin/archive' },
     { label: 'Document Disputes',   icon: '📂', to: '/admin/disputes' },
+    { label: 'Permission Requests', icon: '🔐', to: '/admin/approvals' },
   ],
   DOCTOR: [
     { label: 'Dashboard',       icon: '🏥', to: '/doctor' },

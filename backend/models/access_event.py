@@ -16,5 +16,6 @@ class RecordAccessEvent(Base):
     actor_role: Mapped[str | None] = mapped_column(String(30), nullable=True)
     event_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    break_glass_request_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("break_glass_requests.id", ondelete="SET NULL"), nullable=True, index=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now(), index=True)

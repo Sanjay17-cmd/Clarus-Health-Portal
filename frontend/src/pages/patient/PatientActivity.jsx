@@ -39,7 +39,9 @@ function EventItem({ ev }) {
     const actor = ev.actor_name ? (ev.actor_role === 'DOCTOR' ? `Dr. ${ev.actor_name}` : ev.actor_name) : 'Someone'
     const grp = ev.group_title ? ` in "${ev.group_title}"` : ''
     switch (ev.event_type) {
-      case 'VIEWED': return `${actor} viewed your record${grp}`
+      case 'VIEWED': return ev.details?.archive_exporter
+        ? `${actor} opened and viewed your ZIP-imported report${grp}, originally exported by ${ev.details.archive_exporter}`
+        : `${actor} viewed your record${grp}`
       case 'DOWNLOADED': return `${actor} downloaded your record${grp}`
       case 'SHARED': return `Your record${grp} was shared`
       case 'ZIP_EXPORTED': return `${actor} exported your records as a ZIP archive${grp}`
@@ -49,7 +51,7 @@ function EventItem({ ev }) {
       case 'CORRECTION_CREATED': return `A correction was uploaded for your record${grp}`
       case 'DELETION_REQUESTED': return `A deletion was requested for your record${grp}`
       case 'DISPUTE_CREATED': return `You filed a dispute for a record${grp}`
-      case 'BREAK_GLASS': return `${actor} requested emergency access to your records`
+      case 'BREAK_GLASS': return `${actor} used emergency access to view your records${ev.details?.archive_exporter ? ` from a ZIP originally exported by ${ev.details.archive_exporter}` : ''}${ev.details?.justification ? `: ${ev.details.justification}` : ''}`
       case 'RECORD_SUSPENDED': return `A record${grp} was suspended pending review`
       case 'RECORD_RESTORED': return `A suspended record${grp} was restored`
       default: return `${ev.event_type.replace(/_/g, ' ')} on your record${grp}`

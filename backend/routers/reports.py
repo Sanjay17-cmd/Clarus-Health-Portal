@@ -39,6 +39,12 @@ def list_groups(patient_id: int | None = Query(None), user: User = Depends(get_a
     if user.role == UserRole.PATIENT:
         return report_service.get_groups_for_patient(db, user.id)
     elif user.role == UserRole.DOCTOR:
+        if patient_id:
+            from services.break_glass_service import get_active_access
+            if not get_active_access(db, user.id, patient_id):
+                from core.exceptions import forbidden
+                raise forbidden("Active emergency access is required for this patient")
+            return report_service.get_groups_for_patient(db, patient_id)
         return report_service.get_groups_accessible_to_doctor(db, user)
     elif user.role in (UserRole.LAB_TECHNICIAN, UserRole.ADMIN):
         if not patient_id:
@@ -100,6 +106,14 @@ def view_file(file_id: int, user: User = Depends(get_active_user), db: Session =
         from models.report import ReportRecord
         record = db.query(ReportRecord).filter(ReportRecord.id == rf.record_id).first()
         if record:
+            archive_metadata = report_service.get_archive_metadata_for_record(db, record) if user.role == UserRole.DOCTOR else None
+            event_details = None
+            if archive_metadata:
+                event_details = {
+                    "archive_exporter": (archive_metadata.get("exported_by") or {}).get("name"),
+                    "archive_export_id": archive_metadata.get("export_id"),
+                    "archive_importer": (archive_metadata.get("imported_by") or {}).get("name"),
+                }
             ev = RecordAccessEvent(
                 patient_id=record.group.patient_id if record.group else None,
                 actor_id=user.id,
@@ -107,7 +121,18 @@ def view_file(file_id: int, user: User = Depends(get_active_user), db: Session =
                 event_type="VIEWED",
                 record_id=rf.record_id,
                 group_id=record.group_id,
+                details=event_details,
             )
+            if user.role == UserRole.DOCTOR:
+                from services.break_glass_service import get_active_access
+                from models.break_glass import BreakGlassAction
+                emergency = get_active_access(db, user.id, record.group.patient_id, record.group_id)
+                if emergency:
+                    ev.event_type = "BREAK_GLASS"
+                    ev.break_glass_request_id = emergency.id
+                    ev.details = {**(ev.details or {}), "justification": emergency.justification}
+                    db.add(BreakGlassAction(request_id=emergency.id, action="RECORD_VIEWED",
+                                            target_type="ReportRecord", target_id=rf.record_id))
             db.add(ev)
             db.commit()
     except Exception:
@@ -117,10 +142,6 @@ def view_file(file_id: int, user: User = Depends(get_active_user), db: Session =
 
 @router.get("/files/{file_id}/download")
 def download_file(file_id: int, user: User = Depends(get_active_user), db: Session = Depends(get_db)):
-    # Phase 3B: block download for emergency-access-only doctors
-    if user.role == UserRole.DOCTOR:
-        pass
-
     rf, data = report_service.get_file_for_download(db, file_id, viewer=user)
     # Log download event
     try:

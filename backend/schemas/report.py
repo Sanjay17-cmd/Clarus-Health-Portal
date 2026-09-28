@@ -43,6 +43,7 @@ class ReportRecordRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     files: list[ReportFileRead] = []
+    archive_metadata: dict | None = None
 
     model_config = {"from_attributes": True}
 
@@ -96,6 +97,10 @@ class ReportGroupRead(BaseModel):
     updated_at: datetime
     record_count: int = 0
     latest_record_date: datetime | None = None
+    emergency_access: bool = False
+    break_glass_request_id: int | None = None
+    break_glass_doctor_id: int | None = None
+    can_emergency_share: bool = False
 
     model_config = {"from_attributes": True}
 

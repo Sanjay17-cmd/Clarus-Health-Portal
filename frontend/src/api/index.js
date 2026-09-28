@@ -36,6 +36,17 @@ export const permanentlyDeleteRecord = (requestId, data) => client.post(`/admin/
 export const getExports = () => client.get('/admin/exports')
 export const getImports = () => client.get('/admin/imports')
 
+export const getAdminPermissionRequests = () => client.get('/admin/permissions')
+export const decideAdminPermissionRequest = (id, approve, notes) =>
+  client.post(`/admin/permissions/${id}/decision`, { approve, notes })
+export const requestDownloadPermission = (group_id, justification) =>
+  client.post('/permissions/download-request', { group_id, justification })
+export const searchEmergencyPatients = (search) =>
+  client.get('/break-glass/patients', { params: search ? { search } : {} })
+export const requestBreakGlass = (data) => client.post('/break-glass/request', data)
+export const getEmergencyDoctors = () => client.get('/break-glass/doctors')
+export const shareDuringEmergency = (data) => client.post('/break-glass/share', data)
+
 
 // --- archive.js ---
 
