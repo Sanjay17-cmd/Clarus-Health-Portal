@@ -22,9 +22,6 @@ export default function DoctorDashboard() {
   const [showExportModal, setShowExportModal] = useState(false)
   
   // Import state
-  const [patients, setPatients] = useState([])
-  const [importPatientId, setImportPatientId] = useState('')
-  const [importPatientSearch, setImportPatientSearch] = useState('')
   const [importFile, setImportFile] = useState(null)
   const [importing, setImporting] = useState(false)
   const [showImport, setShowImport] = useState(false)
@@ -49,7 +46,6 @@ export default function DoctorDashboard() {
       emergency: group.emergency_access,
       emergencyRequestId: group.break_glass_request_id,
     })))).catch(console.error).finally(() => setLoading(false))
-    searchEmergencyPatients().then(setPatients).catch(console.error)
   }, [])
 
   const handleSelectGroup = (group) => {
@@ -136,14 +132,13 @@ export default function DoctorDashboard() {
 
   const handleImport = async (e) => {
     e.preventDefault()
-    if (!importPatientId || !importFile) return
+    if (!importFile) return
     setImporting(true)
     const fd = new FormData()
-    fd.append('patient_id', importPatientId)
     fd.append('file', importFile)
     try {
-      await importZip(fd)
-      toast.success('ZIP successfully imported')
+      const result = await importZip(fd)
+      toast.success('ZIP processed', `${result.record_ids_imported?.length || 0} report(s) attached without duplicating existing documents`)
       setShowImport(false)
       setImportFile(null)
       // Refresh groups
@@ -152,14 +147,6 @@ export default function DoctorDashboard() {
       toast.error(err.response?.data?.detail || err.message)
     } finally {
       setImporting(false)
-    }
-  }
-
-  const handleImportPatientSearch = async () => {
-    try {
-      setPatients(await searchEmergencyPatients(importPatientSearch.trim()))
-    } catch (error) {
-      toast.error(error.message || 'Could not search patients')
     }
   }
 
@@ -210,26 +197,15 @@ export default function DoctorDashboard() {
         <Card title="Import Records from ZIP" className="mb-4">
           <form onSubmit={handleImport} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
             <div className="form-group" style={{ marginBottom: 0, flex: 1 }}>
-              <label className="form-label">Target Patient</label>
-              <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-                <input className="form-input" value={importPatientSearch} onChange={e => setImportPatientSearch(e.target.value)} placeholder="Search by name or email" />
-                <Button type="button" variant="secondary" onClick={handleImportPatientSearch}>Find</Button>
-              </div>
-              <select className="form-input" value={importPatientId} onChange={e => setImportPatientId(e.target.value)} required>
-                <option value="">Select patient to attach records to...</option>
-                {patients.map(p => <option key={p.id} value={p.id}>{p.name} ({p.email})</option>)}
-              </select>
-            </div>
-            <div className="form-group" style={{ marginBottom: 0, flex: 1 }}>
               <label className="form-label">ZIP Archive</label>
               <input type="file" className="form-input" accept=".zip" required onChange={e => setImportFile(e.target.files[0])} ref={fileInputRef} />
             </div>
-            <Button type="submit" variant="primary" disabled={importing || !importPatientId || !importFile}>
+            <Button type="submit" variant="primary" disabled={importing || !importFile}>
               {importing ? 'Importing...' : 'Upload & Import'}
             </Button>
           </form>
           <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-            The patient selected here must match the patient inside the ZIP's <code>metadata.json</code>.
+            Patient identity is matched automatically from the archive metadata.
           </div>
         </Card>
       )}
@@ -327,13 +303,6 @@ export default function DoctorDashboard() {
                         {r.corrects_record_id && <div style={{ color: 'var(--brand-primary)', marginTop: 2 }}>↳ Corrects record from {fmtDate(r.corrects_record_date)}</div>}
                         {r.notes && <div style={{ marginTop: '0.5rem', color: 'var(--text-primary)', background: 'var(--bg-surface-alt)', padding: '0.5rem', borderRadius: 4 }}><em>"{r.notes}"</em></div>}
                       </div>
-
-                      {r.archive_metadata && (
-                        <details style={{ marginBottom: '1rem', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-surface-alt)' }}>
-                          <summary style={{ padding: '0.65rem 0.8rem', cursor: 'pointer', fontWeight: 600 }}>Original ZIP details</summary>
-                          <pre style={{ margin: 0, padding: '0.8rem', maxHeight: 280, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 12, color: 'var(--text-muted)' }}>{JSON.stringify(r.archive_metadata, null, 2)}</pre>
-                        </details>
-                      )}
 
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                         {r.files?.map(f => (

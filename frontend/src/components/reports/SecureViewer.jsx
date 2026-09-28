@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { viewFile, downloadFile } from '../../api'
 import { getPublicFile } from '../../api'
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 const ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2, 3, 4]
 
@@ -56,35 +57,73 @@ function PdfViewer({ src }) {
   const containerRef = useRef(null)
   const [loading, setLoading] = useState(true)
   const [numPages, setNumPages] = useState(0)
+  const [pdfDocument, setPdfDocument] = useState(null)
+  const [pdfError, setPdfError] = useState(null)
   const [zoom, setZoom] = useState(1)
   const [zoomIdx, setZoomIdx] = useState(2)
   const canvasRefs = useRef({})
 
   useEffect(() => {
     setLoading(true)
+    setNumPages(0)
+    setPdfDocument(null)
+    setPdfError(null)
     let cancelled = false
+    let loadedPdf = null
 
     import('pdfjs-dist').then(({ getDocument, GlobalWorkerOptions }) => {
-      GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.mjs', import.meta.url).toString()
-      return getDocument(src).promise
-    }).then(async (pdf) => {
+      GlobalWorkerOptions.workerSrc = pdfWorkerUrl
+      return getDocument({ url: src }).promise
+    }).then(pdf => {
       if (cancelled) return
+      loadedPdf = pdf
+      setPdfDocument(pdf)
       setNumPages(pdf.numPages)
       setLoading(false)
-      for (let i = 1; i <= pdf.numPages; i++) {
-        if (cancelled) break
-        const page = await pdf.getPage(i)
-        const vp = page.getViewport({ scale: 1.5 })
-        const canvas = canvasRefs.current[i]
-        if (!canvas) continue
-        canvas.height = vp.height
-        canvas.width = vp.width
-        await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise
+    }).catch(error => {
+      if (!cancelled) {
+        setLoading(false)
+        setPdfError(error.message || 'This PDF could not be opened.')
       }
-    }).catch(() => { if (!cancelled) setLoading(false) })
+    })
 
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      loadedPdf?.destroy()
+    }
   }, [src])
+
+  useEffect(() => {
+    if (!pdfDocument || !numPages) return undefined
+    let cancelled = false
+    const renderTasks = []
+
+    const renderPages = async () => {
+      for (let pageNumber = 1; pageNumber <= numPages; pageNumber++) {
+        if (cancelled) return
+        const canvas = canvasRefs.current[pageNumber]
+        if (!canvas) continue
+        const page = await pdfDocument.getPage(pageNumber)
+        const viewport = page.getViewport({ scale: 1.5 })
+        canvas.height = viewport.height
+        canvas.width = viewport.width
+        const task = page.render({ canvasContext: canvas.getContext('2d'), viewport })
+        renderTasks.push(task)
+        await task.promise
+      }
+    }
+
+    renderPages().catch(error => {
+      if (!cancelled && error?.name !== 'RenderingCancelledException') {
+        setPdfError(error.message || 'A PDF page could not be rendered.')
+      }
+    })
+
+    return () => {
+      cancelled = true
+      renderTasks.forEach(task => task.cancel())
+    }
+  }, [pdfDocument, numPages])
 
   const zoomIn = () => { const ni = Math.min(zoomIdx + 1, ZOOM_STEPS.length - 1); setZoomIdx(ni); setZoom(ZOOM_STEPS[ni]) }
   const zoomOut = () => { const ni = Math.max(zoomIdx - 1, 0); setZoomIdx(ni); setZoom(ZOOM_STEPS[ni]) }
@@ -100,6 +139,7 @@ function PdfViewer({ src }) {
       </div>
       <div ref={containerRef} style={{ flex: 1, overflow: 'auto', background: '#1a1a1a', padding: '1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
         {loading && <div className="animate-pulse" style={{ color: 'rgba(255,255,255,0.4)', marginTop: '3rem' }}>Loading PDF…</div>}
+        {pdfError && <div role="alert" style={{ color: '#fca5a5', padding: '1.5rem', textAlign: 'center' }}>{pdfError}</div>}
         {Array.from({ length: numPages }, (_, i) => i + 1).map(i => (
           <div key={i} style={{ transform: `scale(${zoom})`, transformOrigin: 'top center', marginBottom: zoom > 1 ? `${(zoom - 1) * 400}px` : 0 }}>
             <canvas ref={el => { canvasRefs.current[i] = el }} style={{ display: 'block', boxShadow: '0 4px 24px rgba(0,0,0,0.5)', borderRadius: 4 }} />

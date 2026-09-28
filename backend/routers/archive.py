@@ -32,14 +32,14 @@ def export_zip(
 
 @router.post("/import")
 async def import_zip(
-    patient_id: int = Form(...),
+    patient_id: int | None = Form(None),
     group_id: int | None = Form(None),
     import_notes: str | None = Form(None),
     file: UploadFile = File(...),
     user: User = Depends(get_active_user),
     db: Session = Depends(get_db),
 ):
-    """Import a Clarus-exported ZIP. Doctor selects patient; server validates metadata.json match."""
+    """Import a Clarus ZIP and resolve its patient from the archive metadata."""
     if user.role not in (UserRole.DOCTOR, UserRole.ADMIN):
         raise forbidden("Only doctors and admins can import archives")
     zip_bytes = await file.read()

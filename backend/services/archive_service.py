@@ -21,6 +21,7 @@ import os
 import re
 import uuid
 import zipfile
+from collections import Counter
 from datetime import datetime, timezone
 
 from sqlalchemy import inspect, text
@@ -246,7 +247,7 @@ def export_zip(
 def import_zip(
     db: Session,
     zip_bytes: bytes,
-    patient_id: int,
+    patient_id: int | None,
     group_id: int | None,
     importer: User,
     import_notes: str | None = None,
@@ -261,13 +262,7 @@ def import_zip(
     if len(zip_bytes) > MAX_ZIP_SIZE_BYTES:
         raise bad_request("ZIP file exceeds 500 MB limit")
 
-    # Validate target patient
     from models.user import User as UModel
-    patient = db.query(UModel).filter(
-        UModel.id == patient_id, UModel.role == UserRole.PATIENT
-    ).first()
-    if not patient:
-        raise not_found("Patient")
 
     # Open and validate ZIP
     try:
@@ -289,31 +284,33 @@ def import_zip(
 
     _validate_metadata_structure(meta)
 
-    # Validate patient match
-    meta_patient_id = meta["patient"]["id"]
-    if int(meta_patient_id) != patient_id:
-        raise bad_request(
-            f"ZIP contains records for patient ID {meta_patient_id}, "
-            f"but you selected patient ID {patient_id}. They must match."
-        )
-
-    # Check for duplicate import
-    original_export_id = meta.get("export_id")
-    if original_export_id:
-        if _uses_legacy_zip_import_schema(db):
-            dup = db.execute(text(
-                "SELECT 1 FROM zip_imports WHERE source_export_uuid=:export_id LIMIT 1"
-            ), {"export_id": original_export_id}).first()
-        else:
-            dup = db.query(ZipImport).filter(
-                ZipImport.original_export_id == original_export_id
+    # Resolve the patient from trusted ZIP identity instead of requiring a second selection.
+    meta_patient = meta["patient"]
+    meta_patient_id = int(meta_patient["id"])
+    patient_email = (meta_patient.get("email") or "").strip().lower()
+    if patient_id is not None:
+        patient = db.query(UModel).filter(
+            UModel.id == patient_id, UModel.role == UserRole.PATIENT
+        ).first()
+        if not patient:
+            raise not_found("Patient")
+        if patient_email and patient.email.strip().lower() != patient_email:
+            raise bad_request("The selected patient does not match the patient in this ZIP")
+    else:
+        patient = db.query(UModel).filter(
+            UModel.id == meta_patient_id, UModel.role == UserRole.PATIENT
+        ).first()
+        if patient and patient_email and patient.email.strip().lower() != patient_email:
+            patient = None
+        if not patient and patient_email:
+            patient = db.query(UModel).filter(
+                UModel.email == patient_email, UModel.role == UserRole.PATIENT
             ).first()
-        if dup:
-            raise bad_request(
-                f"This ZIP was already imported (import ID: {dup.id}). "
-                "Duplicate imports are not allowed."
-            )
+        if not patient:
+            raise not_found("Patient matching the ZIP metadata")
+        patient_id = patient.id
 
+    original_export_id = meta.get("export_id")
     # Resolve or create group
     if group_id:
         group = db.query(ReportGroup).filter(
@@ -325,15 +322,39 @@ def import_zip(
             raise bad_request("Selected report group does not belong to this patient")
     else:
         meta_group = meta.get("report_group", {})
-        group = ReportGroup(
-            patient_id=patient_id,
-            title=f"[Imported] {meta_group.get('title', 'Unknown')}",
-            test_type=meta_group.get("test_type", "Imported"),
-            description=f"Imported from ZIP export {original_export_id}",
-            created_by=importer.id,
-        )
-        db.add(group)
-        db.flush()
+        source_group_id = meta_group.get("id")
+        group = None
+        if source_group_id is not None:
+            group = db.query(ReportGroup).filter(
+                ReportGroup.id == int(source_group_id),
+                ReportGroup.patient_id == patient_id,
+                ReportGroup.is_active == 1,
+            ).first()
+            if group and (
+                group.title != meta_group.get("title") or
+                group.test_type != meta_group.get("test_type")
+            ):
+                group = None
+        if not group and meta_group.get("title") and meta_group.get("test_type"):
+            group_titles = [meta_group["title"], f"[Imported] {meta_group['title']}"]
+            matching_groups = db.query(ReportGroup).filter(
+                ReportGroup.patient_id == patient_id,
+                ReportGroup.title.in_(group_titles),
+                ReportGroup.test_type == meta_group["test_type"],
+                ReportGroup.is_active == 1,
+            ).limit(2).all()
+            if len(matching_groups) == 1:
+                group = matching_groups[0]
+        if not group:
+            group = ReportGroup(
+                patient_id=patient_id,
+                title=f"[Imported] {meta_group.get('title', 'Unknown')}",
+                test_type=meta_group.get("test_type", "Imported"),
+                description=f"Imported from ZIP export {original_export_id}",
+                created_by=importer.id,
+            )
+            db.add(group)
+            db.flush()
 
     # Extract files safely (anti path-traversal)
     prefix = meta_entry.rsplit("metadata.json", 1)[0]
@@ -343,36 +364,118 @@ def import_zip(
     total_files = 0
     original_exporter_name = meta.get("exported_by", {}).get("name", "Unknown")
     original_exporter_id: int | None = None
+    original_exporter_email = (meta.get("exported_by", {}).get("email") or "").strip().lower()
     try:
-        original_exporter_id = int(meta["exported_by"]["id"])
+        source_exporter_id = int(meta["exported_by"]["id"])
+        source_exporter = db.query(UModel).filter(UModel.id == source_exporter_id).first()
+        if source_exporter and (not original_exporter_email or source_exporter.email.strip().lower() == original_exporter_email):
+            original_exporter_id = source_exporter.id
     except Exception:
         pass
+    if original_exporter_id is None and original_exporter_email:
+        source_exporter = db.query(UModel).filter(UModel.email == original_exporter_email).first()
+        if source_exporter:
+            original_exporter_id = source_exporter.id
+
+    reused_record_ids = []
+    from models.access_event import RecordAccessEvent
+    from models.share import GranteeType, ReportPermission
+
+    def signatures_for_existing(record):
+        signatures = []
+        for stored_file in record.files:
+            if not stored_file.is_active:
+                continue
+            try:
+                content = storage.read(stored_file.stored_path)
+            except FileNotFoundError:
+                return None
+            signatures.append((hashlib.sha256(content).hexdigest(), stored_file.mime_type))
+        return sorted(signatures)
 
     for rec_meta in meta.get("records", []):
-        record = ReportRecord(
-            group_id=group.id,
-            record_type=RecordType(rec_meta.get("record_type", "ORIGINAL")),
-            record_date=datetime.fromisoformat(rec_meta["record_date"]),
-            notes=rec_meta.get("notes"),
-            lab_technician_id=importer.id,
-            lab_technician_name=f"{rec_meta.get('lab_technician_name', 'Unknown')} [via import by {importer.name}]",
-            corrects_record_id=None,  # Imported corrections cannot reference original IDs
-        )
-        db.add(record)
-        db.flush()
-        imported_record_ids.append(record.id)
+        try:
+            record_type = RecordType(rec_meta.get("record_type", "ORIGINAL"))
+            record_date = datetime.fromisoformat(rec_meta["record_date"])
+            if record_date.tzinfo:
+                record_date = record_date.astimezone(timezone.utc).replace(tzinfo=None)
+        except (ValueError, TypeError, KeyError):
+            raise bad_request("metadata.json contains an invalid record date or type")
 
-        from models.share import GranteeType, ReportPermission
-        db.add(ReportPermission(
-            record_id=record.id,
-            granted_by=importer.id,
-            grantee_type=GranteeType.USER,
-            grantee_user_id=importer.id,
-            can_view=1,
-            can_download=0,
-            can_share=0,
-        ))
-        from models.access_event import RecordAccessEvent
+        incoming_files = []
+        for entry_name in names:
+            if not entry_name.startswith(f"{prefix}records/{rec_meta['id']}/"):
+                continue
+            _assert_safe_path(entry_name)
+            file_info = zf.getinfo(entry_name)
+            if file_info.is_dir():
+                continue
+
+            raw = zf.read(entry_name)
+            basename = os.path.basename(entry_name)
+            file_id_str = basename.split("_", 1)[0] if "_" in basename else ""
+            fmeta = file_meta_by_id.get(file_id_str, {})
+            original_name = fmeta.get("original_name", basename)
+            mime = fmeta.get("mime_type", "application/octet-stream")
+            actual_sha = hashlib.sha256(raw).hexdigest()
+            expected_sha = fmeta.get("sha256")
+            if expected_sha and actual_sha != expected_sha:
+                raise bad_request(f"Checksum mismatch for file '{original_name}'")
+            incoming_files.append({"bytes": raw, "name": original_name, "mime": mime, "sha256": actual_sha})
+
+        incoming_signatures = sorted((item["sha256"], item["mime"]) for item in incoming_files)
+        candidates = db.query(ReportRecord).options(joinedload(ReportRecord.files)).filter(
+            ReportRecord.group_id == group.id,
+            ReportRecord.record_type == record_type,
+            ReportRecord.record_date == record_date,
+            ReportRecord.notes == rec_meta.get("notes"),
+            ReportRecord.is_active == 1,
+            ReportRecord.suspension_status == SuspensionStatus.ACTIVE,
+        ).all()
+        record = next((candidate for candidate in candidates
+                   if incoming_signatures and
+                   not (Counter(incoming_signatures) - Counter(signatures_for_existing(candidate) or []))), None)
+        reused = record is not None
+
+        if not record:
+            corrects_record_id = None
+            source_corrected_id = rec_meta.get("corrects_record_id")
+            if source_corrected_id is not None:
+                for source_record, imported_id in zip(meta.get("records", []), imported_record_ids):
+                    if source_record.get("id") == source_corrected_id:
+                        corrects_record_id = imported_id
+                        break
+            record = ReportRecord(
+                group_id=group.id,
+                record_type=record_type,
+                record_date=record_date,
+                notes=rec_meta.get("notes"),
+                lab_technician_id=importer.id,
+                lab_technician_name=f"{rec_meta.get('lab_technician_name', 'Unknown')} [via import by {importer.name}]",
+                corrects_record_id=corrects_record_id,
+            )
+            db.add(record)
+            db.flush()
+        else:
+            reused_record_ids.append(record.id)
+
+        imported_record_ids.append(record.id)
+        existing_permission = db.query(ReportPermission.id).filter(
+            ReportPermission.record_id == record.id,
+            ReportPermission.grantee_type == GranteeType.USER,
+            ReportPermission.grantee_user_id == importer.id,
+            ReportPermission.can_view == 1,
+        ).first()
+        if not existing_permission:
+            db.add(ReportPermission(
+                record_id=record.id,
+                granted_by=importer.id,
+                grantee_type=GranteeType.USER,
+                grantee_user_id=importer.id,
+                can_view=1,
+                can_download=0,
+                can_share=0,
+            ))
         db.add(RecordAccessEvent(
             record_id=record.id,
             group_id=group.id,
@@ -380,54 +483,29 @@ def import_zip(
             actor_id=importer.id,
             actor_role=importer.role.value,
             event_type="ZIP_IMPORTED",
-            details={"original_exporter": original_exporter_name},
+            details={"original_exporter": original_exporter_name, "reused_existing_record": reused},
         ))
 
-        # Find files belonging to this record in the ZIP
-        for entry_name in names:
-            if not entry_name.startswith(f"{prefix}records/{rec_meta['id']}/"):
-                continue
-            _assert_safe_path(entry_name)
-
-            file_info = zf.getinfo(entry_name)
-            if file_info.is_dir():
-                continue
-
-            raw = zf.read(entry_name)
-            basename = os.path.basename(entry_name)
-
-            # Determine original name from metadata
-            file_id_str = basename.split("_", 1)[0] if "_" in basename else ""
-            fmeta = file_meta_by_id.get(file_id_str, {})
-            original_name = fmeta.get("original_name", basename)
-            mime = fmeta.get("mime_type", "application/octet-stream")
-
-            # Validate checksum if present
-            expected_sha = fmeta.get("sha256")
-            if expected_sha:
-                actual_sha = hashlib.sha256(raw).hexdigest()
-                if actual_sha != expected_sha:
-                    raise bad_request(f"Checksum mismatch for file '{original_name}'")
-
-            stored_path = storage.generate_path(original_name, subfolder="imports")
-            storage.save(raw, stored_path)
-
-            rf = ReportFile(
-                record_id=record.id,
-                original_name=original_name,
-                stored_path=stored_path,
-                mime_type=mime,
-                file_size=len(raw),
-                sort_order=total_files,
-                uploaded_by=importer.id,
-            )
-            db.add(rf)
-            total_files += 1
+        if not reused:
+            for file_order, item in enumerate(incoming_files):
+                stored_path = storage.generate_path(item["name"], subfolder="imports")
+                storage.save(item["bytes"], stored_path)
+                db.add(ReportFile(
+                    record_id=record.id,
+                    original_name=item["name"],
+                    stored_path=stored_path,
+                    mime_type=item["mime"],
+                    file_size=len(item["bytes"]),
+                    sort_order=file_order,
+                    uploaded_by=importer.id,
+                ))
+        total_files += len(incoming_files)
 
     import_id = str(uuid.uuid4())
     import_mapping = {
         "group_id": group.id,
         "record_ids_imported": imported_record_ids,
+        "reused_record_ids": reused_record_ids,
         "import_notes": import_notes,
         "imported_by": {"id": importer.id, "name": importer.name},
     }
@@ -475,12 +553,15 @@ def import_zip(
     )
 
     # Notify patient
-
+    reuse_notice = (
+        f" {len(reused_record_ids)} existing report(s) were linked rather than duplicated."
+        if reused_record_ids else ""
+    )
     notification_service.create_notification(
         db,
         recipient_id=patient_id,
         title="Records Imported Into Your Profile",
-        message=f"Dr. {importer.name} imported records previously exported by {original_exporter_name}. The importing doctor has view-only access; downloads still require administrator approval.",
+        message=f"Dr. {importer.name} imported records previously exported by {original_exporter_name}.{reuse_notice} The importing doctor has view-only access; downloads still require administrator approval.",
         type=NotificationType.ZIP_IMPORTED,
     )
 

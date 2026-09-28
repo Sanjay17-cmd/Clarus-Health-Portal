@@ -198,13 +198,6 @@ export default function PatientDashboard() {
                         {r.notes && <div style={{ marginTop: '0.4rem', fontStyle: 'italic' }}>"{r.notes}"</div>}
                       </div>
 
-                      {r.archive_metadata && (
-                        <details style={{ marginBottom: '0.75rem', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-surface-alt)' }}>
-                          <summary style={{ padding: '0.65rem 0.8rem', cursor: 'pointer', fontWeight: 600 }}>Original ZIP details</summary>
-                          <pre style={{ margin: 0, padding: '0.8rem', maxHeight: 280, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 12, color: 'var(--text-muted)' }}>{JSON.stringify(r.archive_metadata, null, 2)}</pre>
-                        </details>
-                      )}
-
                       {/* Files */}
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
                         {(r.files || []).map(f => (
