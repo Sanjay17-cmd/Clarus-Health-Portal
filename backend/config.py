@@ -6,23 +6,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
-    # Database
     DB_HOST: str = "localhost"
     DB_PORT: int = 3306
     DB_NAME: str = "clarus_health"
     DB_USER: str
     DB_PASSWORD: str
 
-    # JWT
     JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
-    # App
     APP_ENV: str = "development"
     ALLOWED_ORIGINS: str = "http://localhost:5173"
 
-    # Phase 2 — File storage
     UPLOAD_DIR: str = "uploads"
     MAX_FILE_SIZE_MB: int = 20
     EXTERNAL_BASE_URL: str = "http://localhost:5173"

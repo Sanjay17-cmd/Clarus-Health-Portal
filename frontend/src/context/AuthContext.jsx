@@ -8,35 +8,32 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem('clarus_token'))
   const [loading, setLoading] = useState(true)
 
-  // Load user from token on mount
   useEffect(() => {
-    if (token) {
-      authApi.me()
-        .then(u => setUser(u))
-        .catch(() => {
-          localStorage.removeItem('clarus_token')
-          setToken(null)
-          setUser(null)
-        })
-        .finally(() => setLoading(false))
-    } else {
+    if (!token) {
       setLoading(false)
+      return
     }
+
+    authApi.me()
+      .then(setUser)
+      .catch(() => {
+        localStorage.removeItem('clarus_token')
+        setToken(null)
+        setUser(null)
+      })
+      .finally(() => setLoading(false))
   }, [token])
 
   const login = useCallback(async (email, password) => {
     const data = await authApi.login({ email, password })
     localStorage.setItem('clarus_token', data.access_token)
     setToken(data.access_token)
-    // Fetch full user profile
     const fullUser = await authApi.me()
     setUser(fullUser)
     return fullUser
   }, [])
 
-  const register = useCallback(async (payload) => {
-    return authApi.register(payload)
-  }, [])
+  const register = useCallback(async (payload) => authApi.register(payload), [])
 
   const logout = useCallback(() => {
     localStorage.removeItem('clarus_token')

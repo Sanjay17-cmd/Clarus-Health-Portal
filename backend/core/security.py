@@ -8,8 +8,6 @@ from jose import JWTError, jwt
 from config import settings
 
 
-# ── Password ──────────────────────────────────────────────────────────────────
-
 def hash_password(plain: str) -> str:
     """Return bcrypt hash of *plain* password."""
     pwd_bytes = plain.encode("utf-8")[:72]
@@ -24,8 +22,6 @@ def verify_password(plain: str, hashed: str) -> bool:
     except Exception:
         return False
 
-
-# ── JWT ───────────────────────────────────────────────────────────────────────
 
 def create_access_token(data: dict[str, Any]) -> str:
     """Create a signed JWT with an expiry claim."""

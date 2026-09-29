@@ -1,4 +1,4 @@
-"""FastAPI dependencies for authentication and role-based authorization."""
+"""FastAPI auth dependencies."""
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
@@ -15,18 +15,14 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer),
     db: Session = Depends(get_db),
 ) -> User:
-    """Validate JWT and return the authenticated User model."""
     token = credentials.credentials
     try:
         payload = decode_access_token(token)
-        user_id: int | None = payload.get("sub")
+        user_id = payload.get("sub")
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token is invalid or expired",
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token is invalid or expired")
 
     user = db.get(User, int(user_id))
     if user is None:
@@ -41,7 +37,6 @@ def get_current_user(
 
 
 def get_active_user(user: User = Depends(get_current_user)) -> User:
-    """Require an ACTIVE account."""
     if user.status != UserStatus.ACTIVE:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -51,7 +46,6 @@ def get_active_user(user: User = Depends(get_current_user)) -> User:
 
 
 def require_role(*roles: UserRole):
-    """Return a dependency that asserts the current user has one of *roles*."""
     def _dep(user: User = Depends(get_active_user)) -> User:
         if user.role not in roles:
             raise HTTPException(
@@ -59,10 +53,10 @@ def require_role(*roles: UserRole):
                 detail="You do not have permission to perform this action",
             )
         return user
+
     return _dep
 
 
-# Convenience aliases
 require_admin = require_role(UserRole.ADMIN)
 require_doctor = require_role(UserRole.DOCTOR)
 require_patient = require_role(UserRole.PATIENT)

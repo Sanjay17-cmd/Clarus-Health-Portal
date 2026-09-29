@@ -1,79 +1,242 @@
 # Clarus Health Portal
 
-A local, full-stack clinical information system for secure patient record management.
+A secure healthcare portal for managing patient medical records, lab uploads, doctor access, approvals, audits, corrections, and document sharing.
 
-**Phase 4 — Final Local Integration** · No cloud services required.
+GitHub: https://github.com/Sanjay17-cmd/Clarus-Health-Portal
+
+This project is used to manage patient records in a local clinical environment where:
+- patients can upload and view their reports,
+- lab technicians can upload medical documents,
+- doctors can access authorized records,
+- admins review approvals, disputes, and audit actions,
+- sensitive files are protected with role-based and record-based access checks.
+
+---
+
+## Why this project exists
+
+Clarus Health Portal is built for secure healthcare data handling in a local environment without depending on cloud services. It helps organizations manage:
+- patient report records,
+- doctor access permissions,
+- lab technician reporting workflows,
+- document export and archive handling,
+- correction and dispute processes,
+- audit logs for accountability.
+
+It is a practical clinical record management system with a full-stack architecture, role segregation, and local storage.
+
+---
+
+## Key features
+
+- Admin approval workflow for users and doctors
+- Patient and technician record management
+- Doctor access control by patient/record/group permissions
+- External QR-based and share-link access (read-only)
+- PDF and image viewing inside the app
+- Correction and deletion request flow
+- ZIP export/import for archived patient records
+- Dispute and break-glass emergency handling
+- Audit logging and activity tracking
+- Local MySQL + local file storage setup for development and demos
 
 ---
 
 ## Architecture
 
+```mermaid
+flowchart TB
+    subgraph Browser[Frontend Layer - React + Vite]
+        U[Patient / Doctor / Technician / Admin]
+        UI[Web UI Components]
+        APIClient[Axios API Client]
+        Token[JWT Token in Browser]
+        U --> UI
+        UI --> APIClient
+        APIClient --> Token
+    end
+
+    subgraph Backend[Backend Layer - FastAPI]
+        Router[API Routers]
+        Auth[Auth + Role Checks]
+        Service[Services / Business Logic]
+        FileCtrl[File Access Control]
+        Audit[Audit + Notification Layer]
+    end
+
+    subgraph Data[Persistence Layer]
+        DB[(MySQL Database)]
+        FS[Local File System Storage]
+        Uploads[backend/uploads]
+    end
+
+    subgraph Roles[Permission Model]
+        Admin[Admin]
+        Patient[Patient]
+        Doctor[Doctor]
+        Tech[Lab Technician]
+    end
+
+    U -->|login / requests / uploads| UI
+    UI -->|HTTP JSON + multipart| APIClient
+    APIClient -->|JWT + request data| Router
+    Router --> Auth
+    Auth -->|validate token + role| Service
+    Service -->|read/write metadata| DB
+    Service -->|upload / view / download| FS
+    FS --> Uploads
+
+    Admin -->|approve users / review disputes / audit all actions| Router
+    Patient -->|owns records / grant share / request deletion| Router
+    Doctor -->|view allowed records / emergency access request| Router
+    Tech -->|upload report files / create records| Router
+
+    Auth -->|allow / deny| FileCtrl
+    FileCtrl -->|check owner / permission / group share / quarantine rules| DB
+    FileCtrl -->|serve file or reject| FS
+
+    Service -->|track actions| Audit
+    Audit -->|write audit entries| DB
+    Service -->|notify user| Audit
+
+    DB -->|permissions / users / groups / file metadata / approvals| Service
+    FS -->|binary data| Service
+
+    classDef role fill:#dfeeff,stroke:#2b4b7c,color:#132a43;
+    classDef layer fill:#eafaf1,stroke:#1d7f5a,color:#123b2d;
+    classDef data fill:#fff4d6,stroke:#a66a00,color:#5a3900;
+    class Admin,Patient,Doctor,Tech role;
+    class Browser,Backend,Roles layer;
+    class DB,FS,Uploads data;
 ```
-Browser (React + Vite)
-        ↓
-FastAPI (Python) — JWT auth, role enforcement, file access control
-        ↓
-MySQL (local)  +  Local Filesystem Storage
-```
+
+### Full permission flow
+
+The important idea is that this system does not simply trust the frontend. Every action flows through the backend, where access is checked before any data is read or written.
+
+1. User logs in from the frontend.
+2. The frontend sends a JWT token with each request.
+3. The backend validates the token and user status.
+4. The backend checks the user's role and permissions.
+5. The service decides if the user owns the record, is assigned by share, is an admin, or is allowed under emergency rules.
+6. The backend reads or writes metadata in MySQL and reads or writes actual files in the upload storage.
+7. Audit entries are created for accountability.
+
+### Permission examples
+
+| Action | Who can do it | Condition |
+|---|---|---|
+| Register user | Anyone | New user account |
+| Admin approval | Admin | User must be pending |
+| Upload report | Lab Technician | Must be assigned to patient / valid role |
+| View patient file | Patient / Doctor / Admin | Must have permission or ownership |
+| Share record with doctor | Patient | Must own the record/group |
+| Download external shared file | External viewer | Only if share allows it, usually view-only |
+| Approve dispute | Admin | Must review dispute and accept or reject |
+| Break-glass access | Doctor / Admin | Valid emergency reason and approval flow |
+| Delete or restore record | Patient / Admin / Technician depending on flow | Requires request and review |
+
+### Data transfer map
+
+| Data | Sent from | Sent to | Storage | Controlled by |
+|---|---|---|---|---|
+| Login request | Browser | Backend API | None | JWT validation |
+| User profile | Backend | MySQL | Database | Authentication layer |
+| Upload file | Browser | Backend | Local storage | File access layer |
+| File metadata | Backend | MySQL | Database | Service logic |
+| Share request | Frontend | Backend | MySQL | Patient ownership |
+| View permission | Backend | MySQL | Database | Role and share checks |
+| Audit entry | Backend | MySQL | Database | Audit layer |
+| ZIP export | Backend | Frontend | Local generated archive | Access control + record scope |
+| QR share | Backend | Frontend / patient | MySQL + QR payload | Share validity |
+
+### Why this architecture matters
+
+This project is designed around a security-first model:
+- the frontend is only a presentation layer,
+- the backend is the enforcement layer,
+- MySQL stores structured data,
+- the local filesystem stores binary health documents,
+- permissions are checked before every file or record action.
+
+This ensures that even if a user manipulates the browser, the backend still decides whether access is allowed.
 
 ---
 
-## Tech Stack
+## Tech stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 18, Vite 6, Vanilla CSS |
-| Backend | FastAPI, SQLAlchemy, Pydantic v2 |
-| Auth | JWT (python-jose) + bcrypt |
-| Database | MySQL 8.x (local) |
-| File storage | Local filesystem (`backend/uploads/`) |
-| PDF viewer | pdfjs-dist |
-| QR codes | qrcode |
+| Frontend | React, Vite, Axios |
+| Backend | FastAPI, SQLAlchemy, Pydantic |
+| Auth | JWT + bcrypt |
+| Database | MySQL 8 |
+| File storage | Local filesystem |
+| File types | PDF, PNG, JPG |
+| Extras | QR code generation, PDF viewer |
 
 ---
 
-## Project Structure
+## Project structure
 
-```
-Clarus Health/
-├── frontend/               # React + Vite SPA
-│   ├── src/
-│   │   ├── api/            # Axios API clients per feature
-│   │   ├── components/     # Layout, UI, Reports, Auth
-│   │   ├── context/        # AuthContext, ThemeContext
-│   │   ├── pages/          # admin/, doctor/, patient/, technician/
-│   │   └── index.css       # Complete design system (tokens, dark mode, 3D)
-│   └── package.json
-├── backend/                # FastAPI application
-│   ├── main.py             # App entry point — all routers mounted
-│   ├── core/               # Config, dependencies, exceptions
-│   ├── models/             # SQLAlchemy ORM models
-│   ├── schemas/            # Pydantic request/response schemas
-│   ├── services/           # Business logic layer
-│   ├── routers/            # HTTP route handlers
-│   ├── uploads/            # Medical file storage (never served directly)
-│   └── requirements.txt
+```text
+Clarus-Health-Portal/
+├── backend/
+│   ├── core/
+│   ├── models/
+│   ├── routers/
+│   ├── schemas/
+│   ├── services/
+│   ├── storage/
+│   ├── uploads/
+│   ├── config.py
+│   ├── database.py
+│   ├── main.py
+│   ├── requirements.txt
+│   └── .env
 ├── database/
-│   ├── phase1_schema.sql   # Core users, roles, specializations
-│   ├── phase2_schema.sql   # Reports, files, permissions, shares
-│   ├── phase3A_schema.sql  # Corrections, deletions, archive provenance
-│   ├── phase3B_schema.sql  # Break-Glass, disputes, access events
-│   ├── phase4_schema.sql   # Accepted, version-scoped group shares
-│   └── phase5_schema.sql   # Emergency shares and admin permission approvals
-└── README.md
+│   ├── phase1_schema.sql
+│   ├── phase2_schema.sql
+│   ├── phase3A_schema.sql
+│   ├── phase3B_schema.sql
+│   ├── phase4_schema.sql
+│   └── phase5_schema.sql
+├── frontend/
+│   ├── src/
+│   ├── index.html
+│   ├── package.json
+│   ├── package-lock.json
+│   └── vite.config.js
+├── README.md
+└── .gitignore
 ```
 
 ---
 
-## Database Setup (Manual — SQL Only)
+## Prerequisites
 
-> ⚠️ **Never let Antigravity or any tool execute SQL against your database.**
+Before running the project, install:
+- Python 3.11+
+- Node.js 18+
+- MySQL 8+
+- Git
 
-### Prerequisites
-- MySQL 8.x running locally
-- A database named `clarus_health` (the backend default; configure with `DB_NAME` in `.env` if needed)
+---
 
-### Execute phases in order:
+## First-time setup
+
+### 1) Create the MySQL database
+
+Open MySQL and create a database named:
+
+```sql
+CREATE DATABASE clarus_health;
+USE clarus_health;
+```
+
+### 2) Run SQL files in order
+
+Run these scripts in sequence from the project root:
 
 ```bash
 mysql -u root -p clarus_health < database/phase1_schema.sql
@@ -84,199 +247,235 @@ mysql -u root -p clarus_health < database/phase4_schema.sql
 mysql -u root -p clarus_health < database/phase5_schema.sql
 ```
 
-Phase 5 adds temporary view-only emergency shares and one-use administrator approvals for doctor downloads. A doctor needs an approved, unused download request for each file or ZIP download; emergency access and emergency shares expire with the four-hour break-glass session. Imported Clarus ZIPs retain their metadata and notify the patient.
+Important:
+- use the same database name configured in backend `.env`
+- run them in the exact order listed above
+- if using MySQL Workbench, open each SQL file one by one and execute in the same order
 
-Or via MySQL Workbench:
-1. Open connection → `clarus_health` database
-2. File → Run SQL Script → select each file in order
+### 3) Configure backend environment
 
----
+Create a file named `backend/.env` with:
 
-## Backend Setup
+```env
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=clarus_health
+DB_USER=root
+DB_PASSWORD=your_mysql_password
+JWT_SECRET_KEY=change_this_to_a_strong_secret
+JWT_ALGORITHM=HS256
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=60
+APP_ENV=development
+ALLOWED_ORIGINS=http://localhost:5173
+UPLOAD_DIR=uploads
+MAX_FILE_SIZE_MB=20
+EXTERNAL_BASE_URL=http://localhost:5173
+```
 
-### Prerequisites
-- Python 3.11+
-
-### Install
+### 4) Install backend dependencies
 
 ```bash
 cd backend
 python -m venv venv
 
 # Windows
-.\venv\Scripts\activate
+venv\Scripts\activate
 
-# macOS/Linux
+# Linux/macOS
 source venv/bin/activate
 
 pip install -r requirements.txt
 ```
 
-### Environment Configuration
-
-Create `backend/.env`:
-
-```env
-SECRET_KEY=your-super-secret-jwt-key-change-this-in-production
-DATABASE_URL=mysql+pymysql://root:password@localhost:3306/clarusdb
-UPLOAD_DIR=uploads
-ALLOWED_ORIGINS=http://localhost:5173
-ACCESS_TOKEN_EXPIRE_MINUTES=60
-```
-
-### Run
+### 5) Start backend
 
 ```bash
 cd backend
-.\venv\Scripts\activate   # or source venv/bin/activate
+venv\Scripts\activate
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-API available at: http://localhost:8000  
-Interactive docs: http://localhost:8000/docs
+Backend API docs will be available at:
+- http://localhost:8000/docs
+- http://localhost:8000/redoc
 
----
-
-## Frontend Setup
-
-### Prerequisites
-- Node.js 18+
-
-### Install & Run
+### 6) Install frontend dependencies
 
 ```bash
 cd frontend
 npm install
+```
+
+### 7) Start frontend
+
+```bash
+cd frontend
 npm run dev
 ```
 
-App available at: http://localhost:5173
+Frontend will run at:
+- http://localhost:5173
 
-### Build (production bundle)
+---
+
+## Regular usage
+
+After the first setup, use this flow each time:
+
+### Start backend
 
 ```bash
-npm run build
+cd backend
+venv\Scripts\activate
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+### Start frontend
+
+```bash
+cd frontend
+npm run dev
+```
+
+### Open app
+
+Visit:
+- http://localhost:5173
+
+### Common role flow
+
+1. Register a patient/admin/doctor/technician
+2. Admin approves users
+3. Technician uploads patient medical files
+4. Patient shares access with doctors
+5. Doctors view authorized records
+6. Admin resolves disputes and reviews audit events
 
 ---
 
-## Role Accounts & Testing
+## User roles and responsibilities
 
-There is **no seed data**. All users are created through the application.
-
-### First-Time Setup
-
-1. Start backend + frontend
-2. Go to http://localhost:5173/register
-3. Register an **Admin** account — first admin may need to be manually set in MySQL:
-   ```sql
-   UPDATE users SET role='ADMIN', status='ACTIVE' WHERE email='admin@example.com';
-   ```
-4. Log in as Admin → User Management → Approve pending users
-
-### Roles
-
-| Role | Dashboard | Key Features |
-|---|---|---|
-| `ADMIN` | `/admin` | Users, approvals, audit, disputes, security, suspensions |
-| `DOCTOR` | `/doctor` | View shared records, ZIP import, Break-Glass |
-| `PATIENT` | `/patient` | Share groups, QR links, disputes, activity log |
-| `LAB_TECHNICIAN` | `/technician` | Upload records, create groups, corrections |
-
-### Testing Workflow Order
-
-```
-1. Admin registers + approves Lab Technician and Doctor
-2. Patient registers + Admin approves
-3. Lab Technician → Select Patient → Upload records
-4. Patient → Dashboard → Share group with Doctor
-5. Doctor → Dashboard → View records (via group share)
-6. Patient → Generate QR/link for external sharing
-7. Lab Technician → Correction workflow (select history → correct)
-8. Patient → Dispute → Admin resolves
-9. Doctor → Break-Glass emergency access
-```
+| Role | Main purpose |
+|---|---|
+| Admin | User approval, disputes, audits, security actions |
+| Patient | Manage reports, share records, view activity |
+| Doctor | Access approved patient data and shared records |
+| Lab Technician | Upload reports and create records |
 
 ---
 
-## Feature List
+## Database and file storage notes
 
-### Phase 1 — Core
-- JWT authentication with bcrypt passwords
-- Role-based access control (Admin/Doctor/Patient/Lab Technician)
-- Admin user management and approval workflow
-- Specializations management
+### MySQL
+The database is the source of truth for:
+- user profiles and roles,
+- patient groups and records,
+- file metadata,
+- approvals and access rules,
+- audit logs,
+- disputes and emergency requests.
 
-### Phase 2 — Report System
-- Report group hierarchy (Patient → Group → Record → Files)
-- Lab Technician upload (PDF/PNG/JPEG, multi-file)
-- Internal doctor/specialization sharing with version scope
-- External QR/link sharing (view-only, no download)
-- SecureViewer (PDF canvas render + image viewer with zoom)
-- Notification system
+### Local file storage
+Files uploaded by users are stored under:
+- `backend/uploads/reports/...`
+- `backend/uploads/imports/...`
+- `backend/uploads/quarantine/...`
 
-### Phase 3A — Corrections & Archive
-- Correction workflow (select history → new record with parent link)
-- ZIP export/import with metadata.json
-- Deletion request → suspension → Admin review → restore/permanent
-- Admin Audit Logs
-
-### Phase 3B — Security & Compliance
-- Break-Glass emergency access (password + justification)
-- Abuse detection: 4th distinct patient in 30 min → auto-suspension
-- Document disputes (patient → admin review → quarantine/reassign/resolve)
-- Patient activity timeline (provenance feed)
+These files are not directly exposed as public static assets. The backend controls access before serving them.
 
 ---
 
-## Security Model
+## Security model
 
-### Authentication
-- JWT tokens, expiry enforced
-- Suspended accounts return 403 on all endpoints
+- JWT-based authentication
+- Role-based authorization checks
 - bcrypt password hashing
+- Suspended or disabled users are blocked
+- File access is validated per record and permission
+- Emergency access is restricted and logged
+- ZIP import validates metadata and prevents path traversal issues
 
-### File Access
-- Files **never** served as static assets
-- Every request goes through auth + role check
-- Admin cannot view/download file contents (enforced at API level)
-- Emergency (Break-Glass) access: view only, downloads return 403
-- External QR/link: view only, no download
+## Sharing and break-glass protocols
 
-### Data Integrity
-- Corrections never overwrite originals (linked via `corrects_record_id`)
-- Deletion: suspension → Admin review → either restore or permanent
-- All actions logged to audit table
+### Internal and group sharing
+- Patients can share records or groups with doctors.
+- Sharing is granted only to authorized users and only within valid record scope.
+- Group-based sharing supports version-aware record and file selection.
+- Access can be updated or revoked by the patient at any time.
 
-### Path Safety
-- No filesystem paths in API responses
-- ZIP import validates metadata, prevents path traversal
-- Upload filenames are UUID-renamed on disk
+### External share links
+- QR or direct share links are generated for public or external access.
+- These are read-only links and are not meant for unrestricted downloads.
+- Access is validated by token and share metadata before content is served.
+
+### Break-glass access
+- Break-glass is an emergency access workflow for critical patient care situations.
+- A doctor or admin must provide a valid justification and approval path.
+- Temporary access is logged and restricted to emergency viewing rules.
+- Download permission is not granted in normal break-glass flow unless the approval workflow explicitly allows it.
+- Access is limited in time and subject to audit review.
+
+### Audit and compliance
+- Every major action is recorded in an audit table.
+- File access, share updates, disputes, and administrative decisions are traceable.
+- This supports accountability and patient safety review.
 
 ---
 
-## Known Limitations
+## Screenshots
 
-- File storage is local filesystem — not replicated
-- No email notifications (in-app only)
-- No real-time WebSocket (notifications poll every 30s)
-- PDF viewer uses canvas — very large PDFs may be slow
-- No virus scanning on uploads
-- No multi-tenancy
+No screenshot files are currently stored in this repository, so this section is ready for the final selected images.
+
+Use only the most important 3 screenshots for GitHub:
+1. Dashboard overview
+2. Patient/doctor record access
+3. Admin break-glass / audit review
+
+Recommended folder:
+
+```text
+docs/screenshots/
+├── dashboard-overview.png
+├── patient-record-access.png
+├── admin-breakglass-audit.png
+```
+
+Use this exact markdown format:
+
+```md
+## Lab Technician Upload
+
+![Lab Technician Upload](docs/screenshots/patient-records.png)
+
+## Patient Record Sharing
+
+![Patient Record Share](docs/screenshots/patient_share.png)
+
+## Doctor Break-Glass & Audit Review
+
+![Admin Break-Glass](docs/screenshots/doctor_emergency.png)
+![Audit Review](docs/screenshots/admin-audit.png)
+```
+
+If you only have one screenshot right now, keep only the first block and add the others later.
 
 ---
 
-## Phase 5 Deployment Prerequisites
+## Important notes
 
-> ⚠️ **Supabase and Vercel are NOT part of Phase 4. Stop here.**
+- This project is designed for local/demo deployment, not production cloud deployment.
+- It uses local file storage and local MySQL.
+- It is a healthcare record management portal focused on secure access and auditability.
+- The system is best suited for academic, demo, portfolio, and internal project use.
 
-Before Phase 5 can proceed:
+---
 
-1. **Database**: Migrate from local MySQL → hosted MySQL (e.g. PlanetScale or Supabase Postgres)
-2. **File Storage**: Replace local `uploads/` → object storage (S3, Supabase Storage)
-3. **Backend**: Configure for production WSGI (Gunicorn + Uvicorn workers)
-4. **Frontend**: Deploy to Vercel (update `VITE_API_URL` env var)
-5. **Environment**: Set production `SECRET_KEY`, `DATABASE_URL`, `CORS` origins
-6. **HTTPS**: All API calls must be HTTPS in production
-7. **Email**: Integrate SMTP for real email notifications
-8. **Migrations**: Replace raw SQL files with Alembic migration system
+## License
+
+This project is intended for learning, demonstration, and internal development use unless a separate license is added later.
+
+---
+
+## Summary
+
+Clarus Health Portal is a patient healthcare record management system built using React + FastAPI + MySQL. It covers registration, authorization, report uploads, doctor access permissions, document sharing, correction and dispute workflows, admin review, and secure local file handling.

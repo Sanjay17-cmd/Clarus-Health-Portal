@@ -1,7 +1,5 @@
 import client from './client'
 
-// --- admin.js ---
-
 export const adminApi = {
   getOverview: () => client.get('/admin/overview'),
 
@@ -26,9 +24,6 @@ export const adminApi = {
   getAuditLogs: (params) => client.get('/admin/audit-logs', { params }),
 }
 
-
-// --- admin_reports.js ---
-
 export const getCorrections = () => client.get('/admin/corrections')
 export const getDeletionRequests = (status) => client.get('/admin/deletion-requests', { params: status ? { status } : {} })
 export const restoreRecord = (requestId, data) => client.post(`/admin/deletion-requests/${requestId}/restore`, data)
@@ -47,9 +42,6 @@ export const requestBreakGlass = (data) => client.post('/break-glass/request', d
 export const getEmergencyDoctors = () => client.get('/break-glass/doctors')
 export const shareDuringEmergency = (data) => client.post('/break-glass/share', data)
 
-
-// --- archive.js ---
-
 export const exportZip = (groupId, recordIds) => {
   const params = {}
   if (recordIds?.length) params.record_ids = recordIds.join(',')
@@ -60,17 +52,11 @@ export const importZip = (formData) => client.post('/archive/import', formData, 
   headers: { 'Content-Type': 'multipart/form-data' },
 })
 
-
-// --- auth.js ---
-
 export const authApi = {
   register: (data) => client.post('/auth/register', data),
   login: (data) => client.post('/auth/login', data),
   me: () => client.get('/auth/me'),
 }
-
-
-// --- disputes.js ---
 
 export const createDispute = (data) => client.post('/disputes', data)
 export const myDisputes = () => client.get('/disputes/my')
@@ -79,35 +65,24 @@ export const adminListDisputes = (status) => client.get('/admin/disputes', { par
 export const adminActOnDispute = (disputeId, data) => client.post(`/admin/disputes/${disputeId}/action`, data)
 export const adminDisputeAudit = (disputeId) => client.get(`/admin/disputes/${disputeId}/audit`)
 
-
-// --- doctor.js ---
 export const doctorApi = {
   getProfile: () => client.get('/doctor/profile'),
   requestSpecChange: (data) => client.post('/doctor/specialization-request', data),
   getMySpecRequests: () => client.get('/doctor/specialization-requests'),
 }
 
-
-// --- notifications.js ---
 export const notificationsApi = {
   list: () => client.get('/notifications'),
   markRead: (id) => client.post(`/notifications/${id}/read`),
   markAllRead: () => client.post('/notifications/read-all'),
 }
 
-
-// --- patient.js ---
 export const patientApi = {
   getProfile: () => client.get('/patient/profile'),
 }
 
-
-// --- patient_activity.js ---
-
 export const getMyActivity = (limit = 100) => client.get('/patient/activity', { params: { limit } })
 
-
-// --- reports.js ---
 
 export const getGroups = (patientId) => client.get('/reports/groups', { params: patientId ? { patient_id: patientId } : {} })
 export const createGroup = (formData) => client.post('/reports/groups', formData)
@@ -133,9 +108,6 @@ export const reportsApi = {
   getTechnicianUploads
 }
 
-
-// --- shares.js ---
-
 export const grantPermission = (data) => client.post('/shares/internal', data)
 export const listPermissions = (recordId) => client.get(`/shares/internal/${recordId}`)
 export const updatePermission = (permId, data) => client.patch(`/shares/internal/perm/${permId}`, data)
@@ -145,13 +117,11 @@ export const createExternalShare = (data) => client.post('/shares/external', dat
 export const listExternalShares = (recordId) => client.get(`/shares/external/${recordId}`)
 export const revokeExternalShare = (shareId) => client.delete(`/shares/external/${shareId}`)
 
-// Group shares — Phase 4 version/file-aware
 export const createGroupShare = (data) => client.post('/shares/group', data)
 export const listGroupShares = (groupId) => client.get(`/shares/group/${groupId}`)
 export const updateGroupShare = (shareId, data) => client.patch(`/shares/group/${shareId}`, data)
 export const revokeGroupShare = (shareId) => client.delete(`/shares/group/${shareId}`)
 
-// Doctor-facing share endpoints (Phase 4)
 export const myShares = () => client.get('/shares/my')
 export const acceptShare = (shareId) => client.post(`/shares/group/${shareId}/accept`)
 export const delegateShare = (shareId, data) => client.post(`/shares/group/${shareId}/delegate`, data)
@@ -178,14 +148,10 @@ export const sharesApi = {
   getPublicFile,
 }
 
-
-// --- specializations.js ---
 export const specializationApi = {
   list: () => client.get('/specializations'),
 }
 
-
-// --- technician.js ---
 export const technicianApi = {
   getProfile: () => client.get('/technician/profile'),
 }

@@ -13,13 +13,22 @@ from routers.disputes import router as disputes_router
 from routers.patient_activity import router as patient_activity_router
 from routers.break_glass import router as break_glass_router
 
-app = FastAPI(title="Clarus Health Portal API", version="3.1.0",
-              docs_url="/api/docs", redoc_url="/api/redoc", openapi_url="/api/openapi.json")
+app = FastAPI(
+    title="Clarus Health Portal API",
+    version="3.1.0",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+)
 
-app.add_middleware(CORSMiddleware, allow_origins=settings.allowed_origins_list,
-                   allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.allowed_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Phase 1
 app.include_router(auth.router)
 app.include_router(specializations.router)
 app.include_router(admin.router)
@@ -27,14 +36,11 @@ app.include_router(doctor.router)
 app.include_router(patient.router)
 app.include_router(technician.router)
 app.include_router(notifications.router)
-# Phase 2
 app.include_router(reports_router)
 app.include_router(shares_router)
 app.include_router(public_router)
-# Phase 3A
 app.include_router(admin_reports_router)
 app.include_router(archive_router)
-# Phase 3B
 app.include_router(disputes_router)
 app.include_router(patient_activity_router)
 app.include_router(break_glass_router)

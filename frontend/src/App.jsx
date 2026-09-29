@@ -2,41 +2,32 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { ToastProvider } from './components/ui/Toast'
-
-// Auth guards
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import RoleRoute from './components/auth/RoleRoute'
 
-// Auth pages
 import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
 
-// Admin pages
 import AdminDashboard from './pages/admin/AdminDashboard'
 import UserManagement from './pages/admin/UserManagement'
 import UserDetail from './pages/admin/UserDetail'
 import Specializations from './pages/admin/Specializations'
 import AuditLog from './pages/admin/AuditLog'
 
-// Role dashboards
 import DoctorDashboard from './pages/doctor/DoctorDashboard'
 import SharedReports from './pages/doctor/SharedReports'
 import PatientDashboard from './pages/patient/PatientDashboard'
 import TechnicianDashboard from './pages/technician/TechnicianDashboard'
 
-// Common
 import NotFound from './pages/common/NotFound'
 import Unauthorized from './pages/common/Unauthorized'
 
-// Phase 2
 import SharedView from './pages/shared/SharedView'
 
-// Phase 3A
 import AdminCorrections from './pages/admin/AdminCorrections'
 import AdminSuspended from './pages/admin/AdminSuspended'
 import AdminArchive from './pages/admin/AdminArchive'
 
-// Phase 3B
 import AdminDisputes from './pages/admin/AdminDisputes'
 import AdminApprovals from './pages/admin/AdminApprovals'
 import PatientActivity from './pages/patient/PatientActivity'
@@ -48,12 +39,10 @@ export default function App() {
         <ToastProvider>
           <BrowserRouter>
             <Routes>
-              {/* Public routes */}
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/unauthorized" element={<Unauthorized />} />
 
-              {/* Admin routes */}
               <Route path="/admin" element={
                 <ProtectedRoute>
                   <RoleRoute role="ADMIN">
@@ -101,7 +90,6 @@ export default function App() {
                 <ProtectedRoute><RoleRoute role="ADMIN"><AdminApprovals /></RoleRoute></ProtectedRoute>
               } />
 
-              {/* Doctor routes */}
               <Route path="/doctor" element={
                 <ProtectedRoute>
                   <RoleRoute role="DOCTOR">
@@ -126,7 +114,6 @@ export default function App() {
                 <ProtectedRoute><RoleRoute role="PATIENT"><PatientActivity /></RoleRoute></ProtectedRoute>
               } />
 
-              {/* Technician routes */}
               <Route path="/technician" element={
                 <ProtectedRoute>
                   <RoleRoute role="LAB_TECHNICIAN">
@@ -135,13 +122,10 @@ export default function App() {
                 </ProtectedRoute>
               } />
 
-              {/* Phase 2 — External share (no auth) */}
               <Route path="/shared/:token" element={<SharedView />} />
 
-              {/* Root redirect */}
               <Route path="/" element={<Navigate to="/login" replace />} />
 
-              {/* 404 */}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
