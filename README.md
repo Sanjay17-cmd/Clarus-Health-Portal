@@ -427,19 +427,15 @@ These files are not directly exposed as public static assets. The backend contro
 Use this exact format for your GitHub screenshot section:
 
 ```md
-## Dashboard Overview
+<div align="center">
 
-![Dashboard Overview](docs/screenshots/dashboard-overview.png)
-```
+<img src="docs/screenshots/dashboard-overview.png" alt="Dashboard Overview" width="820">
 
-```md
-## Patient Record Access
+<img src="docs/screenshots/patient-records.png" alt="Patient Record Access" width="820">
 
-![Patient Record Access](docs/screenshots/patient-record-access.png)
+<img src="docs/screenshots/admin-audit.png" alt="Admin Break-Glass & Audit Review" width="820">
 
-## Admin Break-Glass & Audit Review
-
-![Admin Break-Glass & Audit Review](docs/screenshots/admin-breakglass-audit.png)
+</div>
 ```
 
 ---
