@@ -426,11 +426,15 @@ These files are not directly exposed as public static assets. The backend contro
 
 <div align="center">
 
-<img src="docs/screenshots/dashboard-overview.png" alt="Dashboard Overview" width="820">
+<h2>Lab Technician Upload</h2>
+<img src="docs/screenshots/patient-records.png" alt="Lab Technician Upload" width="820">
 
-<img src="docs/screenshots/patient-records.png" alt="Patient Record Access" width="820">
+<h2>Patient Record Sharing</h2>
+<img src="docs/screenshots/patient_share.png" alt="Patient Record Sharing" width="820">
 
-<img src="docs/screenshots/admin-audit.png" alt="Admin Break-Glass & Audit Review" width="820">
+<h2>Doctor Break-Glass & Audit Review</h2>
+<img src="docs/screenshots/doctor_emergency.png" alt="Doctor Break-Glass" width="820">
+<img src="docs/screenshots/admin-audit.png" alt="Audit Review" width="820">
 
 </div>
 
