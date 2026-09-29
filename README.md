@@ -424,9 +424,6 @@ These files are not directly exposed as public static assets. The backend contro
 
 ## Screenshots
 
-Use this exact format for your GitHub screenshot section:
-
-```md
 <div align="center">
 
 <img src="docs/screenshots/dashboard-overview.png" alt="Dashboard Overview" width="820">
@@ -436,7 +433,6 @@ Use this exact format for your GitHub screenshot section:
 <img src="docs/screenshots/admin-audit.png" alt="Admin Break-Glass & Audit Review" width="820">
 
 </div>
-```
 
 ---
 
