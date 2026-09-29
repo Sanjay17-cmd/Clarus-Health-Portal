@@ -424,40 +424,23 @@ These files are not directly exposed as public static assets. The backend contro
 
 ## Screenshots
 
-No screenshot files are currently stored in this repository, so this section is ready for the final selected images.
-
-Use only the most important 3 screenshots for GitHub:
-1. Dashboard overview
-2. Patient/doctor record access
-3. Admin break-glass / audit review
-
-Recommended folder:
-
-```text
-docs/screenshots/
-├── dashboard-overview.png
-├── patient-record-access.png
-├── admin-breakglass-audit.png
-```
-
-Use this exact markdown format:
+Use this exact format for your GitHub screenshot section:
 
 ```md
-## Lab Technician Upload
+## Dashboard Overview
 
-![Lab Technician Upload](docs/screenshots/patient-records.png)
-
-## Patient Record Sharing
-
-![Patient Record Share](docs/screenshots/patient_share.png)
-
-## Doctor Break-Glass & Audit Review
-
-![Admin Break-Glass](docs/screenshots/doctor_emergency.png)
-![Audit Review](docs/screenshots/admin-audit.png)
+![Dashboard Overview](docs/screenshots/dashboard-overview.png)
 ```
 
-If you only have one screenshot right now, keep only the first block and add the others later.
+```md
+## Patient Record Access
+
+![Patient Record Access](docs/screenshots/patient-record-access.png)
+
+## Admin Break-Glass & Audit Review
+
+![Admin Break-Glass & Audit Review](docs/screenshots/admin-breakglass-audit.png)
+```
 
 ---
 
