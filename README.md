@@ -429,7 +429,7 @@ Use this exact format for your GitHub screenshot section:
 ```md
 ## Dashboard Overview
 
-![Dashboard Overview](docs/screenshots/dashboard-overview.png)
+![Dashboard Overview](docs\screenshots\dashboard-overview.png)
 ```
 
 ```md
